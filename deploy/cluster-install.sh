@@ -22,7 +22,9 @@ kubectl() { sudo k3s kubectl "$@"; }
 # 1. k3s server: control plane only (tainted), cross-cloud WireGuard to workers (DESIGN.md §13.3).
 config=$(cat <<EOF
 token: "$(val K3S_TOKEN)"
-disable: [traefik, servicelb]
+# gateway-api-crd: its install job does not tolerate the server taint, so it stays pending and
+# both autoscalers start a worker for it.
+disable: [traefik, servicelb, gateway-api-crd]
 node-taint: ["CriticalAddonsOnly=true:NoExecute"]
 node-external-ip: "$public_ip"
 flannel-backend: wireguard-native
