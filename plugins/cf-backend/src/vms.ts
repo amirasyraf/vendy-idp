@@ -341,7 +341,8 @@ export const vmsPlugin = createBackendPlugin({
               return;
             }
             const { entity, team, requestId } = found;
-            const key = `${operation}:${requestKey}`;
+            // Scoped to the VM: the same client key for another VM is a different request.
+            const key = `${operation}:${ref!.name}:${requestKey}`;
             const repeated = await orchestrator.findByRequestKey(key);
             const spec = record(entity.spec);
             const configuration = record(spec.configuration);
@@ -482,7 +483,7 @@ export const vmsPlugin = createBackendPlugin({
                 params,
               }),
             );
-            if (!created && run.requested_by !== info.user) {
+            if (!created && (run.requested_by !== info.user || run.name !== ref!.name)) {
               res.status(409).json({ error: 'Request key already used' });
               return;
             }

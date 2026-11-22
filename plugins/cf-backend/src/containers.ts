@@ -552,13 +552,13 @@ export const containersPlugin = createBackendPlugin({
                 name: ref!.name,
                 team: found.team,
                 requestId: found.requestId,
-                requestKey: `${operation}:${requestKey}`,
+                requestKey: `${operation}:${ref!.name}:${requestKey}`,
                 requestedBy: info.user,
                 requesterTeams: info.teams,
                 params,
               }),
             );
-            if (!created && run.requested_by !== info.user) {
+            if (!created && (run.requested_by !== info.user || run.name !== ref!.name)) {
               res.status(409).json({ error: 'Request key already used' });
               return;
             }
