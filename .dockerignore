@@ -12,3 +12,4 @@
 !catalog/**
 !deploy/docker-compose.yml
 !deploy/Caddyfile
+!deploy/cluster-install.sh

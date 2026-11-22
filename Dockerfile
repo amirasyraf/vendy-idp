@@ -17,7 +17,7 @@ COPY --chown=node:node packages/backend/dist/bundle.tar.gz ./
 RUN tar xzf bundle.tar.gz && rm bundle.tar.gz
 COPY --chown=node:node app-config.yaml app-config.production.yaml ./
 COPY --chown=node:node catalog ./catalog
-COPY --chown=node:node deploy/docker-compose.yml deploy/Caddyfile ./deploy/
+COPY --chown=node:node deploy/docker-compose.yml deploy/Caddyfile deploy/cluster-install.sh ./deploy/
 LABEL com.compute-factory.artifact="idp"
 EXPOSE 7007
 CMD ["node", "packages/backend", "--config", "app-config.yaml", "--config", "app-config.production.yaml"]

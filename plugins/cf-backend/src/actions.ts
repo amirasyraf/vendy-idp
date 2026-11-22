@@ -13,16 +13,18 @@ async function callVms(
   discovery: DiscoveryService,
   path: string,
   body: Record<string, unknown>,
+  pluginId = 'vms',
 ): Promise<RunResult> {
+  const noun = pluginId === 'vms' ? 'VM' : 'Container';
   const credentials = await ctx.getInitiatorCredentials();
   if (!auth.isPrincipal(credentials, 'user'))
     throw new Error('A signed-in user is required');
-  const base = await discovery.getBaseUrl('vms');
+  const base = await discovery.getBaseUrl(pluginId);
   const deadline = Date.now() + 10 * 60 * 1000;
   for (let attempt = 1; ; attempt++) {
     const { token } = await auth.getPluginRequestToken({
       onBehalfOf: credentials,
-      targetPluginId: 'vms',
+      targetPluginId: pluginId,
     });
     const timeout = AbortSignal.timeout(120000);
     let response: Response | undefined;
@@ -39,7 +41,7 @@ async function callVms(
       });
     } catch (error) {
       if (ctx.signal?.aborted) throw error;
-      failure = `VM request failed (${message(error)})`;
+      failure = `${noun} request failed (${message(error)})`;
     }
     if (response) {
       const result = await response.json().catch(() => undefined as any);
@@ -48,7 +50,7 @@ async function callVms(
       // Our endpoints' deliberate answers carry a string; Backstage's generic error
       // handler sends { error: { name, message } }.
       if (typeof result?.error === 'string') throw new Error(result.error);
-      failure = `VM request HTTP ${response.status}${
+      failure = `${noun} request HTTP ${response.status}${
         typeof result?.error?.message === 'string'
           ? `: ${result.error.message}`
           : ''
@@ -57,7 +59,7 @@ async function callVms(
     }
     if (Date.now() > deadline)
       throw new Error(
-        `${failure}. The run may still have been created; check the VM page before resubmitting.`,
+        `${failure}. The run may still have been created; check the ${noun} page before resubmitting.`,
       );
     ctx.logger.warn(
       `${failure}; retrying the same request (attempt ${attempt + 1})`,
@@ -147,6 +149,41 @@ export function createVmRunAction(
       ctx.logger.info(
         `VM ${ctx.input.operation} run #${result.runId}: ${result.runUrl}`,
       );
+    },
+  });
+}
+
+export function createContainerDispatchAction(
+  auth: AuthService,
+  discovery: DiscoveryService,
+) {
+  return createTemplateAction({
+    id: 'cf:container:dispatch',
+    description: 'Start a container provision run as the requesting user',
+    schema: {
+      input: { name: z => z.string(), specJson: z => z.string() },
+      output,
+    },
+    async handler(ctx) {
+      const result = await ctx.checkpoint({
+        key: 'cf.container.dispatch.v1',
+        fn: () =>
+          callVms(
+            ctx,
+            auth,
+            discovery,
+            '/requests',
+            {
+              name: ctx.input.name,
+              specJson: ctx.input.specJson,
+              requestId: ctx.task.id,
+            },
+            'containers',
+          ),
+      });
+      ctx.output('runId', result.runId);
+      ctx.output('runUrl', result.runUrl);
+      ctx.logger.info(`Container provision run #${result.runId}: ${result.runUrl}`);
     },
   });
 }

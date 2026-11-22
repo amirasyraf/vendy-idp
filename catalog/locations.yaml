@@ -13,6 +13,17 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Location
 metadata:
+  name: cf-containers
+spec:
+  type: url
+  # Optional for the same reason as cf-vms.
+  presence: optional
+  targets:
+    - https://github.com/amirasyraf/vendy-platform/blob/main/containers/*/catalog-info.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
   name: cf-platform-templates
 spec:
   type: url

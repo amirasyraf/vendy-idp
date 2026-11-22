@@ -11,7 +11,9 @@ else
   host=$1
   env_file=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
   [[ -r "$env_file" ]] || { echo 'Env file is not readable' >&2; exit 2; }
-  for key in IDP_DOMAIN IDP_USERS_B64 GITHUB_TOKEN POSTGRES_PASSWORD BACKSTAGE_TOKEN AWS_REGION SSH_CA_SECRET_ID AZURE_READER_SECRET_ID; do
+  for key in IDP_DOMAIN IDP_USERS_B64 GITHUB_TOKEN POSTGRES_PASSWORD BACKSTAGE_TOKEN AWS_REGION SSH_CA_SECRET_ID AZURE_READER_SECRET_ID \
+    K3S_VERSION K3S_TOKEN CA_VERSION IDP_PUBLIC_IP AWS_WORKER_GROUPS AZURE_SUBSCRIPTION_ID AZURE_TENANT_ID AZURE_WORKERS_RG \
+    AZURE_WORKER_SCALE_SETS AZURE_AUTOSCALER_CLIENT_ID AZURE_AUTOSCALER_CERT_B64; do
     grep -qE "^${key}=.+" "$env_file" || { echo "Missing env key: $key" >&2; exit 2; }
   done
   image=${3:-}
@@ -30,7 +32,7 @@ cleanup() {
   if [[ -n "$container" ]]; then docker rm "$container" >/dev/null 2>&1 || true; fi
   if [[ -n "$socket_dir" && -S "$socket_dir/s" ]]; then ssh -S "$socket_dir/s" -O exit "$target" 2>/dev/null || true; fi
   if [[ -n "$socket_dir" ]]; then rm -rf "$socket_dir"; fi
-  rm -f "$lock/docker-compose.yml" "$lock/Caddyfile"
+  rm -f "$lock/docker-compose.yml" "$lock/Caddyfile" "$lock/cluster-install.sh"
   rmdir "$lock"
 }
 trap cleanup EXIT
@@ -68,9 +70,10 @@ start=$SECONDS
 container=$(docker create --pull=never --platform linux/arm64 "$image")
 docker cp "$container:/app/deploy/docker-compose.yml" "$lock/docker-compose.yml"
 docker cp "$container:/app/deploy/Caddyfile" "$lock/Caddyfile"
+docker cp "$container:/app/deploy/cluster-install.sh" "$lock/cluster-install.sh"
 docker compose --env-file "$env_file" -f "$lock/docker-compose.yml" config --no-env-resolution --quiet
 ssh "${ssh_opts[@]}" "$target" 'mkdir -p /opt/idp && chmod 700 /opt/idp'
-scp "${ssh_opts[@]}" "$lock/docker-compose.yml" "$lock/Caddyfile" "$target:/opt/idp/"
+scp "${ssh_opts[@]}" "$lock/docker-compose.yml" "$lock/Caddyfile" "$lock/cluster-install.sh" "$target:/opt/idp/"
 # Feed the env over stdin, creating it with restrictive permissions from the start.
 ssh "${ssh_opts[@]}" "$target" 'umask 077; cat > /opt/idp/.env' < "$env_file"
 # Ship the image through a registry on the host (bound to 127.0.0.1 there) over an SSH tunnel.
@@ -90,6 +93,11 @@ docker tag "$image" localhost:15000/compute-factory-idp:latest
 docker push localhost:15000/compute-factory-idp:latest
 ssh -S "$tunnel" -O exit "$target" 2>/dev/null
 echo "Upload artifact: $((SECONDS - start))s"
+start=$SECONDS
+# The containers cluster (k3s, autoscalers, the IDP's kube credentials in /opt/idp/kube) must be in
+# place before Backstage starts; the script only restarts k3s when its version or config changes.
+ssh "${ssh_opts[@]}" "$target" 'bash /opt/idp/cluster-install.sh /opt/idp/.env' </dev/null
+echo "Containers cluster: $((SECONDS - start))s"
 start=$SECONDS
 ssh "${ssh_opts[@]}" "$target" bash -s -- "$image" <<'REMOTE'
 set -euo pipefail

@@ -9,10 +9,15 @@ import { ComputeFactoryPolicy } from './policy';
 import { createSshSignAction } from './sign';
 import { authProvidersExtensionPoint } from '@backstage/plugin-auth-node';
 import { passwordProviderFactory } from './auth';
-import { createVmDispatchAction, createVmRunAction } from './actions';
+import {
+  createContainerDispatchAction,
+  createVmDispatchAction,
+  createVmRunAction,
+} from './actions';
 
 export { mockRestPlugin } from './servicenow';
 export { vmsPlugin } from './vms';
+export { containersPlugin } from './containers';
 export { clientLogPlugin } from './clientLog';
 export { vmSizesPlugin } from './vmSizes';
 
@@ -61,6 +66,7 @@ export const sshModule = createBackendModule({
           createSshSignAction(catalog, auth),
           createVmDispatchAction(auth, discovery),
           createVmRunAction(auth, discovery),
+          createContainerDispatchAction(auth, discovery),
         );
       },
     });

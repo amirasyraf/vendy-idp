@@ -5,6 +5,7 @@ import {
   passwordAuthModule,
   mockRestPlugin,
   vmsPlugin,
+  containersPlugin,
   clientLogPlugin,
   vmSizesPlugin,
 } from '@internal/plugin-cf-backend';
@@ -25,6 +26,7 @@ backend.add(permissionModule);
 backend.add(sshModule);
 backend.add(mockRestPlugin);
 backend.add(vmsPlugin);
+backend.add(containersPlugin);
 backend.add(clientLogPlugin);
 backend.add(vmSizesPlugin);
 backend.add(import('@backstage/plugin-search-backend'));

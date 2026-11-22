@@ -10,6 +10,7 @@ services:
     ports: ['80:80', '443:443']
     environment:
       IDP_DOMAIN: ${IDP_DOMAIN:?required}
+      IDP_APPS_DOMAIN: apps.${IDP_DOMAIN:?required}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -23,6 +24,11 @@ services:
     env_file: .env
     environment:
       NODE_OPTIONS: --no-node-snapshot --max-old-space-size=1536
+      # Containers: the k3s API on this host and the IDP's service account (cluster-install.sh).
+      KUBE_API: https://host.docker.internal:6443
+    extra_hosts: ['host.docker.internal:host-gateway']
+    volumes:
+      - ./kube:/kube:ro
     depends_on:
       postgres:
         condition: service_healthy

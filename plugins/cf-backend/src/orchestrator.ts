@@ -87,7 +87,10 @@ const BACKOFF_MS = [30_000, 120_000, 480_000];
 const DEADLINE_MS = 45 * 60_000;
 const SEARCH_AFTER_MS = 20_000;
 const DISPATCH_GRACE_MS = 3 * 60_000;
-const WORKFLOW = 'stage.yml';
+
+/** A product's run and stage tables. VMs keep their original table names. */
+export type RunTables = { runs: string; stages: string };
+export const VM_TABLES: RunTables = { runs: 'vm_runs', stages: 'vm_run_stages' };
 
 export class RunConflict extends Error {}
 
@@ -122,9 +125,12 @@ const stageRow = (row: Stage) =>
     'finished_at',
   ]);
 
-export async function initializeOrchestrator(db: Database) {
-  if (!(await db.schema.hasTable('vm_runs'))) {
-    await db.schema.createTable('vm_runs', table => {
+export async function initializeOrchestrator(
+  db: Database,
+  T: RunTables = VM_TABLES,
+) {
+  if (!(await db.schema.hasTable(T.runs))) {
+    await db.schema.createTable(T.runs, table => {
       table.increments('id').primary();
       table.string('kind').notNullable();
       table.string('name').notNullable().index();
@@ -141,8 +147,8 @@ export async function initializeOrchestrator(db: Database) {
       table.bigInteger('finished_at').nullable();
     });
   }
-  if (!(await db.schema.hasTable('vm_run_stages'))) {
-    await db.schema.createTable('vm_run_stages', table => {
+  if (!(await db.schema.hasTable(T.stages))) {
+    await db.schema.createTable(T.stages, table => {
       table.integer('run_id').notNullable();
       table.string('stage').notNullable();
       table.integer('position').notNullable();
@@ -166,19 +172,29 @@ export async function initializeOrchestrator(db: Database) {
       table.primary(['run_id', 'stage']);
     });
   }
-  if (!(await db.schema.hasColumn('vm_run_stages', 'summary'))) {
-    await db.schema.alterTable('vm_run_stages', table => {
+  if (!(await db.schema.hasColumn(T.stages, 'summary'))) {
+    await db.schema.alterTable(T.stages, table => {
       table.text('summary').nullable();
     });
   }
 }
 
 /**
- * A stage that runs inside the IDP instead of as a `stage.yml` dispatch. It returns a one-line
+ * A stage that runs inside the IDP instead of as a workflow dispatch. It returns a one-line
  * summary; throw an error with `permanent: true` to fail without automatic retries. Handlers must
  * be idempotent per run: an attempt interrupted by a restart is run again.
+ *
+ * A handler that must wait for something outside the IDP returns `{ waiting }` instead: the
+ * attempt stays running, the text is shown as its summary, and the handler is called again on the
+ * next tick until it returns a summary, throws, or the attempt passes `waitDeadlineMs`.
  */
-export type InProcessStage = (run: Run) => Promise<string>;
+export type InProcessStage = (
+  run: Run,
+) => Promise<string | { waiting: string }>;
+const WAITING = 'Waiting: ';
+
+/** One planned stage: whether it applies to this run, and whether a failed attempt may be skipped. */
+export type PlannedStage = { stage: string; applies: boolean; skippable?: boolean };
 
 export type NewRun = {
   kind: RunKind;
@@ -191,8 +207,8 @@ export type NewRun = {
   params: Record<string, unknown>;
 };
 
-function plan(kind: RunKind, params: Record<string, any>) {
-  let stages: { stage: string; applies: boolean }[];
+function vmPlan(kind: RunKind, params: Record<string, any>): PlannedStage[] {
+  let stages: PlannedStage[];
   if (kind === 'provision') {
     const configuration = params.spec?.configuration ?? {};
     stages = [
@@ -247,15 +263,40 @@ function plan(kind: RunKind, params: Record<string, any>) {
       { stage: 'finalize', applies: true },
     ];
   }
-  return stages.map(({ stage, applies }, position) => ({
+  return stages.map(item => ({
+    ...item,
+    skippable:
+      (kind === 'provision' || kind === 'reapply') &&
+      SKIPPABLE.includes(item.stage),
+  }));
+}
+
+/** The workflow inputs' `params_json` for a VM stage. */
+function vmStageParams(
+  stage: string,
+  params: Record<string, any>,
+  outcome: string | null,
+): Record<string, unknown> {
+  if (stage === 'register') return { spec: params.spec };
+  if (stage === 'configure')
+    return { compute: params.compute, configuration: params.configuration };
+  if (stage === 'software' && params.remove?.length)
+    return { remove: params.remove };
+  if (stage === 'destroy' && params.demoGeneration)
+    return { demoGeneration: params.demoGeneration };
+  if (stage === 'finalize') return { outcome };
+  return {};
+}
+
+function stageRows(planned: PlannedStage[]) {
+  return planned.map(({ stage, applies, skippable }, position) => ({
     stage,
     position,
     status: (applies ? 'pending' : 'skipped') as StageStatus,
     attempt: 0,
     budget_start: 0,
     max_attempts: MAX_ATTEMPTS,
-    skippable:
-      (kind === 'provision' || kind === 'reapply') && SKIPPABLE.includes(stage),
+    skippable: skippable === true,
     steps: '[]',
     attempts: '[]',
   }));
@@ -267,25 +308,46 @@ export function createOrchestrator(options: {
   appBaseUrl: string;
   inProcess: Record<string, InProcessStage>;
   onFinished?: (run: Run) => void;
+  /** Product hooks; the defaults are the VM product. */
+  tables?: RunTables;
+  workflow?: string;
+  label?: string;
+  /** App route under which `<base>/runs/<id>` shows a run. */
+  basePath?: string;
+  plan?: (kind: RunKind, params: Record<string, any>) => PlannedStage[];
+  stageParams?: (
+    stage: string,
+    params: Record<string, any>,
+    outcome: string | null,
+  ) => Record<string, unknown>;
+  /** How long an in-process stage may keep returning `{ waiting }` in one attempt. */
+  waitDeadlineMs?: number;
 }) {
   const { db, logger, inProcess } = options;
-  const runUrl = (id: number) => `${options.appBaseUrl}/vms/runs/${id}`;
+  const T = options.tables ?? VM_TABLES;
+  const workflow = options.workflow ?? 'stage.yml';
+  const label = options.label ?? 'VM';
+  const plan = options.plan ?? vmPlan;
+  const stageParams = options.stageParams ?? vmStageParams;
+  const waitDeadline = options.waitDeadlineMs ?? 15 * 60_000;
+  const runUrl = (id: number) =>
+    `${options.appBaseUrl}${options.basePath ?? '/vms'}/runs/${id}`;
 
   const getRun = async (id: number) => {
-    const row = await db<Run>('vm_runs').where({ id }).first();
+    const row = await db<Run>(T.runs).where({ id }).first();
     return row ? runRow(row) : undefined;
   };
   const getStages = async (id: number) =>
     (
-      await db<Stage>('vm_run_stages').where({ run_id: id }).orderBy('position')
+      await db<Stage>(T.stages).where({ run_id: id }).orderBy('position')
     ).map(stageRow);
   const touch = (id: number, patch: Partial<Run> = {}) =>
-    db<Run>('vm_runs')
+    db<Run>(T.runs)
       .where({ id })
       .update({ ...patch, updated_at: Date.now() });
   const updateStage = (stage: Stage, patch: Partial<Stage>) => {
     Object.assign(stage, patch);
-    return db<Stage>('vm_run_stages')
+    return db<Stage>(T.stages)
       .where({ run_id: stage.run_id, stage: stage.stage })
       .update(patch);
   };
@@ -305,18 +367,18 @@ export function createOrchestrator(options: {
 
   /** Cancel a run's remaining stages and the run itself, inside the caller's transaction. */
   async function cancel(run: Run, reason: string, trx: Database) {
-    await trx<Stage>('vm_run_stages')
+    await trx<Stage>(T.stages)
       .where({ run_id: run.id })
       .whereIn('status', ['pending', 'running', 'retrying'])
       .update({ status: 'cancelled', next_attempt_at: null });
-    await trx<Run>('vm_runs').where({ id: run.id }).update({
+    await trx<Run>(T.runs).where({ id: run.id }).update({
       status: 'cancelled',
       error: reason,
       finished_at: Date.now(),
       updated_at: Date.now(),
     });
     logger.info(
-      `VM run ${run.id} (${run.kind} ${run.name}) cancelled: ${reason}`,
+      `${label} run ${run.id} (${run.kind} ${run.name}) cancelled: ${reason}`,
     );
   }
 
@@ -330,12 +392,12 @@ export function createOrchestrator(options: {
     trx?: Database,
   ): Promise<{ run: Run; created: boolean }> {
     const work = async (t: Database) => {
-      const existing = await t<Run>('vm_runs')
+      const existing = await t<Run>(T.runs)
         .where({ request_key: input.requestKey })
         .first();
       if (existing) return { run: runRow(existing), created: false };
       const active = (
-        await t<Run>('vm_runs')
+        await t<Run>(T.runs)
           .where({ name: input.name })
           .whereIn('status', ['running', 'failed'])
       ).map(runRow);
@@ -348,10 +410,10 @@ export function createOrchestrator(options: {
       );
       if (blocking)
         throw new RunConflict(
-          `VM ${input.name} already has an active ${blocking.kind} run (#${blocking.id}); retry, skip or destroy it first`,
+          `${label} ${input.name} already has an active ${blocking.kind} run (#${blocking.id}); retry, skip or destroy it first`,
         );
       const now = Date.now();
-      const [inserted] = await t<Run>('vm_runs')
+      const [inserted] = await t<Run>(T.runs)
         .insert({
           kind: input.kind,
           name: input.name,
@@ -373,8 +435,8 @@ export function createOrchestrator(options: {
           ? (inserted as { id: number }).id
           : inserted,
       );
-      await t('vm_run_stages').insert(
-        plan(input.kind, input.params).map(stage => ({
+      await t(T.stages).insert(
+        stageRows(plan(input.kind, input.params)).map(stage => ({
           ...stage,
           run_id: id,
         })),
@@ -382,10 +444,10 @@ export function createOrchestrator(options: {
       for (const run of active)
         await cancel(run, `Superseded by ${input.kind} run #${id}`, t);
       logger.info(
-        `VM run ${id} created: ${input.kind} ${input.name} by ${input.requestedBy}`,
+        `${label} run ${id} created: ${input.kind} ${input.name} by ${input.requestedBy}`,
       );
       return {
-        run: runRow((await t<Run>('vm_runs').where({ id }).first())!),
+        run: runRow((await t<Run>(T.runs).where({ id }).first())!),
         created: true,
       };
     };
@@ -394,19 +456,6 @@ export function createOrchestrator(options: {
 
   function inputsFor(run: Run, stage: Stage, attempt: number) {
     const params = parse<Record<string, any>>(run.params, {});
-    let stageParams: Record<string, unknown> = {};
-    if (stage.stage === 'register') stageParams = { spec: params.spec };
-    else if (stage.stage === 'configure')
-      stageParams = {
-        compute: params.compute,
-        configuration: params.configuration,
-      };
-    else if (stage.stage === 'software' && params.remove?.length)
-      stageParams = { remove: params.remove };
-    else if (stage.stage === 'destroy' && params.demoGeneration)
-      stageParams = { demoGeneration: params.demoGeneration };
-    else if (stage.stage === 'finalize')
-      stageParams = { outcome: stage.outcome };
     return {
       stage: stage.stage,
       name: run.name,
@@ -414,7 +463,9 @@ export function createOrchestrator(options: {
       run_key: `${run.id}.${stage.stage}.${attempt}`,
       requested_by: run.requested_by,
       requester_teams: run.requester_teams,
-      params_json: JSON.stringify(stageParams),
+      params_json: JSON.stringify(
+        stageParams(stage.stage, params, stage.outcome),
+      ),
     };
   }
 
@@ -441,7 +492,7 @@ export function createOrchestrator(options: {
     if (permanent) outcome = 'permanent; not retrying';
     else if (final) outcome = 'retries exhausted';
     logger.warn(
-      `VM run ${run.id} ${run.name} stage ${stage.stage} attempt ${stage.attempt} ${conclusion}: ${error} (${outcome})`,
+      `${label} run ${run.id} ${run.name} stage ${stage.stage} attempt ${stage.attempt} ${conclusion}: ${error} (${outcome})`,
     );
   }
 
@@ -466,10 +517,29 @@ export function createOrchestrator(options: {
     return attempt;
   }
 
-  async function execute(run: Run, stage: Stage, handler: InProcessStage) {
-    const attempt = await begin(run, stage);
+  async function execute(
+    run: Run,
+    stage: Stage,
+    handler: InProcessStage,
+    resume = false,
+  ) {
+    const attempt = resume ? stage.attempt : await begin(run, stage);
     try {
+      if (resume && Date.now() - Number(stage.dispatched_at) > waitDeadline)
+        throw new Error(
+          `${(stage.summary ?? '').slice(WAITING.length) || 'Still waiting'} after ${Math.round(
+            waitDeadline / 60_000,
+          )} minutes`,
+        );
       const summary = await handler(run);
+      if (typeof summary !== 'string') {
+        const text = `${WAITING}${summary.waiting}`;
+        if (text !== stage.summary) {
+          await updateStage(stage, { summary: text });
+          await touch(run.id);
+        }
+        return;
+      }
       await updateStage(stage, {
         status: 'success',
         conclusion: 'success',
@@ -478,7 +548,7 @@ export function createOrchestrator(options: {
         finished_at: Date.now(),
       });
       logger.info(
-        `VM run ${run.id} ${run.name} stage ${stage.stage} attempt ${attempt} succeeded: ${summary}`,
+        `${label} run ${run.id} ${run.name} stage ${stage.stage} attempt ${attempt} succeeded: ${summary}`,
       );
     } catch (error) {
       const permanent = (error as { permanent?: boolean })?.permanent === true;
@@ -492,7 +562,7 @@ export function createOrchestrator(options: {
     const attempt = await begin(run, stage);
     try {
       const result = await github<{ workflow_run_id?: number }>(
-        `/actions/workflows/${WORKFLOW}/dispatches`,
+        `/actions/workflows/${workflow}/dispatches`,
         {
           ref: 'main',
           inputs: inputsFor(run, stage, attempt),
@@ -504,13 +574,13 @@ export function createOrchestrator(options: {
           gha_run_id: String(result!.workflow_run_id),
         });
         logger.info(
-          `VM run ${run.id} ${run.name} stage ${
+          `${label} run ${run.id} ${run.name} stage ${
             stage.stage
           } attempt ${attempt}: GitHub run ${result!.workflow_run_id}`,
         );
       } else {
         logger.warn(
-          `VM run ${run.id} stage ${stage.stage}: dispatch returned no run ID; recovering by run key`,
+          `${label} run ${run.id} stage ${stage.stage}: dispatch returned no run ID; recovering by run key`,
         );
       }
     } catch (error) {
@@ -525,7 +595,7 @@ export function createOrchestrator(options: {
         return;
       }
       logger.warn(
-        `VM run ${run.id} stage ${
+        `${label} run ${run.id} stage ${
           stage.stage
         }: dispatch outcome uncertain (${message(
           error,
@@ -539,7 +609,7 @@ export function createOrchestrator(options: {
     if (age < SEARCH_AFTER_MS) return;
     const key = `[${run.id}.${stage.stage}.${stage.attempt}]`;
     const result = await github<{ workflow_runs: GitHubRun[] }>(
-      `/actions/workflows/${WORKFLOW}/runs?event=workflow_dispatch&per_page=100`,
+      `/actions/workflows/${workflow}/runs?event=workflow_dispatch&per_page=100`,
     );
     const found = result?.workflow_runs.find(item =>
       item.display_title.endsWith(key),
@@ -547,7 +617,7 @@ export function createOrchestrator(options: {
     if (found) {
       await updateStage(stage, { gha_run_id: String(found.id) });
       logger.info(
-        `VM run ${run.id} stage ${stage.stage}: recovered GitHub run ${found.id}`,
+        `${label} run ${run.id} stage ${stage.stage}: recovered GitHub run ${found.id}`,
       );
     } else if (age > DISPATCH_GRACE_MS) {
       await attemptFailed(
@@ -578,7 +648,7 @@ export function createOrchestrator(options: {
       if (!overdue) {
         if (!(error instanceof GitHubError && error.status === 404))
           logger.warn(
-            `VM run ${run.id} stage ${stage.stage}: ${message(error)}`,
+            `${label} run ${run.id} stage ${stage.stage}: ${message(error)}`,
           );
         return;
       }
@@ -604,7 +674,7 @@ export function createOrchestrator(options: {
           finished_at: Date.now(),
         });
         logger.info(
-          `VM run ${run.id} ${run.name} stage ${stage.stage} succeeded`,
+          `${label} run ${run.id} ${run.name} stage ${stage.stage} succeeded`,
         );
         return;
       }
@@ -653,7 +723,7 @@ export function createOrchestrator(options: {
     run.status = status;
     options.onFinished?.(run);
     logger.info(
-      `VM run ${run.id} (${run.kind} ${run.name}) ${status}${
+      `${label} run ${run.id} (${run.kind} ${run.name}) ${status}${
         error ? `: ${error}` : ''
       }`,
     );
@@ -709,15 +779,20 @@ export function createOrchestrator(options: {
       (current.status === 'retrying' &&
         Number(current.next_attempt_at) <= Date.now());
     if (handler) {
-      // In-process attempts finish within the tick; `running` here means a restart interrupted one.
-      if (current.status === 'running')
+      const waiting =
+        current.status === 'running' &&
+        (current.summary ?? '').startsWith(WAITING);
+      // Other in-process attempts finish within the tick; `running` then means a restart
+      // interrupted one. A waiting attempt is simply checked again.
+      if (current.status === 'running' && !waiting)
         // Keep the interrupted attempt in the history before starting the next one.
         await updateStage(current, {
           conclusion: 'interrupted',
           error: 'Interrupted by an IDP restart',
           finished_at: Date.now(),
         });
-      if (due || current.status === 'running')
+      if (waiting) await execute(run, current, handler, true);
+      else if (due || current.status === 'running')
         await execute(run, current, handler);
     } else if (due) await dispatch(run, current);
     else if (current.status === 'running') await poll(run, current);
@@ -729,14 +804,14 @@ export function createOrchestrator(options: {
 
   async function tick() {
     const runs = (
-      await db<Run>('vm_runs').where({ status: 'running' }).orderBy('id')
+      await db<Run>(T.runs).where({ status: 'running' }).orderBy('id')
     ).map(runRow);
     for (const run of runs) {
       try {
         for (let i = 0; i < 12 && run.status === 'running'; i++)
           if (!(await advanceRun(run))) break;
       } catch (error) {
-        logger.warn(`VM run ${run.id} ${run.name}: ${message(error)}`);
+        logger.warn(`${label} run ${run.id} ${run.name}: ${message(error)}`);
       }
     }
   }
@@ -760,7 +835,7 @@ export function createOrchestrator(options: {
     const finalize = stages.find(stage => stage.stage === 'finalize');
     await db.transaction(async trx => {
       const set = (stage: Stage, values: Partial<Stage>) =>
-        trx<Stage>('vm_run_stages')
+        trx<Stage>(T.stages)
           .where({ run_id: stage.run_id, stage: stage.stage })
           .update(values);
       await set(target, { ...archive(target), ...patch });
@@ -774,7 +849,7 @@ export function createOrchestrator(options: {
           finished_at: null,
           next_attempt_at: null,
         });
-      await trx<Run>('vm_runs').where({ id: run.id }).update({
+      await trx<Run>(T.runs).where({ id: run.id }).update({
         status: 'running',
         error: null,
         finished_at: null,
@@ -797,7 +872,7 @@ export function createOrchestrator(options: {
       next_attempt_at: null,
     });
     logger.info(
-      `VM run ${run.id} ${run.name}: ${user} retried stage ${failed.stage}`,
+      `${label} run ${run.id} ${run.name}: ${user} retried stage ${failed.stage}`,
     );
   }
 
@@ -819,7 +894,7 @@ export function createOrchestrator(options: {
       next_attempt_at: null,
     });
     logger.info(
-      `VM run ${run.id} ${run.name}: ${user} skipped stage ${failed.stage}`,
+      `${label} run ${run.id} ${run.name}: ${user} skipped stage ${failed.stage}`,
     );
   }
 
@@ -881,28 +956,28 @@ export function createOrchestrator(options: {
     skip,
     view,
     async findByRequestKey(requestKey: string) {
-      const row = await db<Run>('vm_runs')
+      const row = await db<Run>(T.runs)
         .where({ request_key: requestKey })
         .first();
       return row ? runRow(row) : undefined;
     },
     async runsFor(name: string, limit: number) {
       return (
-        await db<Run>('vm_runs')
+        await db<Run>(T.runs)
           .where({ name })
           .orderBy('id', 'desc')
           .limit(limit)
       ).map(runRow);
     },
     async latestRuns() {
-      const latest = db<Run>('vm_runs').max('id').groupBy('name');
+      const latest = db<Run>(T.runs).max('id').groupBy('name');
       return (
-        await db<Run>('vm_runs').whereIn('id', latest).orderBy('name')
+        await db<Run>(T.runs).whereIn('id', latest).orderBy('name')
       ).map(runRow);
     },
     /** Request ID -> `spec.compute.platform`, from each VM incarnation's provision run. */
     async platforms(requestIds: string[]) {
-      const rows = await db<Run>('vm_runs')
+      const rows = await db<Run>(T.runs)
         .where({ kind: 'provision' })
         .whereIn('request_id', requestIds)
         .select('request_id', 'params');

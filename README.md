@@ -52,6 +52,6 @@ just to ship an app change.
 |---|---|
 | Launch, Home, design, or theming | [`packages/app`](packages/app), [design notes](packages/app/DESIGN.md) |
 | VM pages and run progress | [`plugins/vm-status`](plugins/vm-status) |
-| Sign-in, VM orchestration, or cloud integrations | [`plugins/cf-backend`](plugins/cf-backend) |
+| Sign-in, VM and container orchestration, or cloud integrations | [`plugins/cf-backend`](plugins/cf-backend) |
 | Users, teams, and catalog sources | [`catalog`](catalog), [authorization reference](REFERENCE.md#authorization-and-verified-upstream-contracts) |
 | Troubleshooting a task, run, or proxy issue | [Logging and troubleshooting](REFERENCE.md#logging-and-troubleshooting) |

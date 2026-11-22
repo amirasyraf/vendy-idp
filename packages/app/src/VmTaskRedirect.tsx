@@ -2,7 +2,7 @@ import { PropsWithChildren, useEffect } from 'react';
 import { Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { useTaskEventStream } from '@backstage/plugin-scaffolder-react';
 
-const vmTemplates = new Set(['vm-request', 'vm-modify']);
+const vmTemplates = new Set(['vm-request', 'vm-modify', 'container-request']);
 
 function completedRunPath(output: Record<string, unknown> | undefined) {
   if (!output) return undefined;
@@ -13,7 +13,8 @@ function completedRunPath(output: Record<string, unknown> | undefined) {
       try {
         const url = new URL(link.url, window.location.origin);
         if (url.origin !== window.location.origin) continue;
-        if (/^\/vms\/runs\/[1-9]\d*$/.test(url.pathname)) return url.pathname;
+        if (/^\/(vms|containers)\/runs\/[1-9]\d*$/.test(url.pathname))
+          return url.pathname;
       } catch {
         // Non-URL outputs (e.g. catalog entity refs) aren't run destinations.
       }

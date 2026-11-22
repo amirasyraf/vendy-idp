@@ -34,10 +34,14 @@ export const mockRestPlugin = createBackendPlugin({
             const credentials = await httpAuth.credentials(req, {
               allow: ['service'],
             });
-            if (credentials.principal.subject !== 'plugin:vms') {
-              res
-                .status(403)
-                .json({ error: 'Only the VM orchestrator may call this mock' });
+            if (
+              !['plugin:vms', 'plugin:containers'].includes(
+                credentials.principal.subject,
+              )
+            ) {
+              res.status(403).json({
+                error: 'Only the VM and container orchestrators may call this mock',
+              });
               return;
             }
             const body = req.body;

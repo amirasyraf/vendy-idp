@@ -136,6 +136,14 @@ Node 24 (`mise.toml`) and the scaffold's vendored Yarn 4.13.0.
   and admins (logged), only when the secret's `requestId` matches the VM's `cf/request-id`.
   Windows `access` is the producer of this secret. The browser terminal and browser RDP require
   automation to be enabled.
+- **Containers** (`plugins/cf-backend/src/{containers,kube}.ts`, `packages/app/src/containers/`,
+  `deploy/cluster-install.sh`; vendy CONTRACTS.md §12): the `containers` backend plugin runs a second
+  orchestrator instance (tables `container_runs`/`container_run_stages`, workflow `container-stage.yml`)
+  whose `deploy`/`rollout`/`restart`/`undeploy` stages call the k3s API on the host with the
+  `vendy-idp` service account mounted at `/kube`. `GET /api/containers/tls-ask` is unauthenticated for
+  Caddy's on-demand TLS. `deploy.sh` runs `cluster-install.sh` (k3s server, both cluster autoscalers,
+  node cleanup timer) before starting the stack. Pages: Launch card, `/products/compute/containers`,
+  the container entity card and `/containers/runs/<id>`.
 - **VM health check** (`plugins/cf-backend/src/observed.ts`, CONTRACTS.md §8.3): only where
   `computeFactory.demoAutomation` is on, a 30-second scheduled task (and a scan after each finished
   day-2 run) scans every platform and keeps each platform's result in memory separately (a failing

@@ -21,6 +21,7 @@ import { navModule } from './modules/nav';
 import { homeModule } from './modules/home';
 import { launchPlugin } from './launch';
 import { productsPlugin } from './products';
+import { containersPlugin } from './containers';
 import { CatalogKindFilter } from './CatalogKindFilter';
 import { CatalogPage } from './CatalogPage';
 import { cfLightTheme } from './theme/cfTheme';
@@ -149,6 +150,7 @@ export default createApp({
     vmStatus,
     launchPlugin,
     productsPlugin,
+    containersPlugin,
     navModule,
     homeModule,
     createFrontendModule({
