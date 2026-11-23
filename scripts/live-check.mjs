@@ -38,6 +38,20 @@ try {
   ).toBeVisible();
   console.log(`SIGN-IN PASS: ${user}`);
 
+  await page.goto(`${base}/products/compute/containers`);
+  await page.getByRole('link', { name: 'Deploy a Container' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Choose a Platform' }),
+  ).toBeVisible();
+  for (const platform of ['Azure', 'AWS']) {
+    await page.getByRole('link', { name: platform, exact: true }).click();
+    await expect(page.getByText(platform, { exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Platform' })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Change Platform' }).click();
+  }
+  console.log('CONTAINER LAUNCH LIVE PASS: AWS and Azure selections reach the form');
+  await page.goto(base);
+
   await expect(
     page.getByRole('heading', { name: 'Your Resources' }),
   ).toBeVisible();

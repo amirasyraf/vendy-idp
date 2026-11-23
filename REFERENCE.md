@@ -142,8 +142,10 @@ Node 24 (`mise.toml`) and the scaffold's vendored Yarn 4.13.0.
   whose `deploy`/`rollout`/`restart`/`undeploy` stages call the k3s API on the host with the
   `vendy-idp` service account mounted at `/kube`. `GET /api/containers/tls-ask` is unauthenticated for
   Caddy's on-demand TLS. `deploy.sh` runs `cluster-install.sh` (k3s server, both cluster autoscalers,
-  node cleanup timer) before starting the stack. Pages: Launch card, `/products/compute/containers`,
-  the container entity card and `/containers/runs/<id>`.
+   node cleanup timer) before starting the stack. Launch → Compute → Containers and the Deploy button
+   on `/products/compute/containers` open the AWS/Azure platform picker. The request form receives
+   the platform as `formData.container.platform` and links back to the picker to change it. Other
+   pages: the container entity card and `/containers/runs/<id>`.
 - **VM health check** (`plugins/cf-backend/src/observed.ts`, CONTRACTS.md §8.3): only where
   `computeFactory.demoAutomation` is on, a 30-second scheduled task (and a scan after each finished
   day-2 run) scans every platform and keeps each platform's result in memory separately (a failing
@@ -454,7 +456,8 @@ fails if the page opens `/eventstream`. Against a built (hashed) frontend it als
 and checks that the new-version banner appears; on the dev server that check is skipped.
 `scripts/workflow-ui.mjs` uses installed Google Chrome and fixture API responses to check the served
  frontend without signing in, dispatching a workflow or changing backend state. It also walks
- Home → Compute / Virtual Machines and Launch → Compute → Virtual Machines → platform → image. A
+  Home → Compute / Virtual Machines, Launch → Compute → Containers → platform → form, and
+  Launch → Compute → Virtual Machines → platform → image. A
  multi-release AWS fixture checks selection and submitted form payload; Azure checks that two images
  (Ubuntu, Windows Server) are not preselected, live-size presentation with a quota-blocked size, Azure tag rules, and
  (switching to Windows Server 2025) software checkboxes per OS family and the 4 GiB memory minimum in the
@@ -462,7 +465,8 @@ and checks that the new-version banner appears; on the dev server that check is 
 Set `WORKFLOW_UI_SCREENSHOTS` to a temporary directory to capture run states, entity cards and lists
 at 1440px and 390px widths during the same fixture smoke. Inspect the images, then delete the directory.
 `scripts/live-check.mjs` signs in to the deployed IDP with a real POC login (from the orchestrator's
- gitignored `.poc-passwords`) and checks, read-only, the grouped Home, VM product page, both image
+  gitignored `.poc-passwords`) and checks, read-only, the AWS and Azure container launch forms,
+  the grouped Home, VM product page, both image
  pickers, form prefill, the request form's live AWS instance types and
 specs, that the newest own task page receives events by long polling, and that the newest visible VM
 run's page renders all its stages (read-only; it never presses Retry or Skip). Run it after every deploy:

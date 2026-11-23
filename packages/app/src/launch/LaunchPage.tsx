@@ -21,6 +21,7 @@ import {
 import { errorMessage } from '../clientLog';
 import {
   categories,
+  containerPlatforms,
   launchPath,
   products,
   virtualMachines,
@@ -99,18 +100,21 @@ const useStyles = makeStyles(theme => ({
   actions: { display: 'flex', gap: 16, alignItems: 'center', marginTop: 28 },
 }));
 
-const steps = ['Product Type', 'Product', 'Platform', 'Image', 'Configure'];
+const vmSteps = ['Product Type', 'Product', 'Platform', 'Image', 'Configure'];
+const containerSteps = ['Product Type', 'Product', 'Platform', 'Configure'];
 
 function Shell({
   step,
   back,
   title,
   children,
+  steps = vmSteps,
 }: {
   step: number;
   back: string[];
   title: string;
   children: ReactNode;
+  steps?: string[];
 }) {
   const classes = useStyles();
   return (
@@ -246,9 +250,16 @@ function LaunchFlow() {
   }
   const template = findTemplate(product.template);
   const back = ['/launch', categoryPath];
+  const productLaunch = launchPath(product);
+  const isContainer = product.launchFlow === 'platform';
   if (!template) {
     return (
-      <Shell step={2} back={back} title={product.title}>
+      <Shell
+        step={2}
+        back={back}
+        title={product.title}
+        steps={isContainer ? containerSteps : vmSteps}
+      >
         <Choices {...catalog} />
         {catalog.items && (
           <p>This product is not available to launch right now.</p>
@@ -256,9 +267,30 @@ function LaunchFlow() {
       </Shell>
     );
   }
-  if (product.launchFlow !== 'platform-image')
-    return <Navigate to={templateUrl(template)} replace />;
-  const productLaunch = launchPath(product);
+  if (isContainer) {
+    if (platformId) {
+      const platform = containerPlatforms.find(item => item.id === platformId);
+      return (
+        <Navigate
+          to={
+            platform
+              ? templateUrl(template, { container: { platform: platform.id } })
+              : productLaunch
+          }
+          replace
+        />
+      );
+    }
+    return (
+      <Platforms
+        back={back}
+        productLaunch={productLaunch}
+        platforms={containerPlatforms}
+        workload="container"
+        steps={containerSteps}
+      />
+    );
+  }
   return platformId ? (
     <Images
       key={productLaunch + platformId}
@@ -267,24 +299,34 @@ function LaunchFlow() {
       back={[...back, productLaunch]}
     />
   ) : (
-    <Platforms back={back} productLaunch={productLaunch} />
+    <VmPlatforms back={back} productLaunch={productLaunch} />
+  );
+}
+
+function VmPlatforms(props: { back: string[]; productLaunch: string }) {
+  const platforms = usePlatforms();
+  return (
+    <Platforms {...props} platforms={platforms} workload="virtual machine" />
   );
 }
 
 function Platforms({
   back,
   productLaunch,
+  platforms,
+  workload,
+  steps,
 }: {
   back: string[];
   productLaunch: string;
+  platforms?: { id: string; label: string; available: boolean }[];
+  workload: string;
+  steps?: string[];
 }) {
   const classes = useStyles();
-  const platforms = usePlatforms();
   return (
-    <Shell step={2} back={back} title="Choose a Platform">
-      <p className={classes.sub}>
-        Choose where to deploy your virtual machine.
-      </p>
+    <Shell step={2} back={back} title="Choose a Platform" steps={steps}>
+      <p className={classes.sub}>Choose where to deploy your {workload}.</p>
       {!platforms && <p role="status">Loading platforms…</p>}
       {platforms?.length === 0 && (
         <p role="alert">Platforms unavailable. Try again shortly.</p>

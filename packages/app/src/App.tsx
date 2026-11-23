@@ -44,6 +44,15 @@ const clientMonitor = AppRootElementBlueprint.make({
 // Scaffolder customisations; default fields, task UI, logs and controls are preserved.
 const scaffolder = scaffolderPlugin.withOverrides({
   extensions: [
+    FormFieldBlueprint.make({
+      name: 'container-platform',
+      params: {
+        field: () =>
+          import('./containers/ContainerPlatformField').then(
+            m => m.ContainerPlatform,
+          ),
+      },
+    }),
     // VM request compute field: the chosen platform/image, size cards with live specs and an
     // Advanced instance-type picker (platform template `ui:field: VmComputePicker`).
     FormFieldBlueprint.make({

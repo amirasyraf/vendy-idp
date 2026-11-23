@@ -24,6 +24,16 @@ const template = {
   },
   spec: { type: 'vm', owner: 'group:default/alpha' },
 };
+const containerTemplate = {
+  ...template,
+  metadata: {
+    name: 'container-request',
+    namespace: 'default',
+    title: 'Deploy a Container',
+    tags: ['product'],
+  },
+  spec: { ...template.spec, type: 'service' },
+};
 const vm = {
   apiVersion: 'backstage.io/v1alpha1',
   kind: 'Resource',
@@ -634,6 +644,33 @@ try {
         vms: [],
         instanceTypes: ['t3.micro', 't3.small', 't3.medium', 't3.large'],
       };
+    } else if (path.endsWith('/container-request/parameter-schema')) {
+      json = {
+        title: 'Deploy a Container',
+        steps: [
+          {
+            title: 'Container',
+            schema: {
+              type: 'object',
+              required: ['container'],
+              properties: {
+                container: {
+                  type: 'object',
+                  required: ['platform'],
+                  properties: {
+                    platform: {
+                      title: 'Platform',
+                      type: 'string',
+                      enum: ['aws', 'azure'],
+                      'ui:field': 'ContainerPlatform',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      };
     } else if (path.endsWith('/vm-request/parameter-schema')) {
       json = {
         title: 'Request a VM',
@@ -708,14 +745,18 @@ try {
         });
         return;
       }
-      json = path.includes('/resource/') ? vm : template;
+      json = path.includes('/resource/')
+        ? vm
+        : path.endsWith('/container-request')
+        ? containerTemplate
+        : template;
     } else if (
       path.endsWith('/entities') &&
       /metadata\.tags=product/.test(
         decodeURIComponent(new URL(route.request().url()).search),
       )
     ) {
-      json = [template];
+      json = [template, containerTemplate];
     } else if (path.endsWith('/entities')) {
       json = listVms;
     }
@@ -1426,6 +1467,32 @@ try {
     .getByRole('link', { name: /^Compute/ })
     .click();
   await expect(page).toHaveURL(`${base}/launch/compute`);
+  await page.getByRole('link', { name: /^Containers/ }).click();
+  const containerLaunchUrl = `${base}/launch/compute/containers`;
+  await expect(page).toHaveURL(containerLaunchUrl);
+  await expect(
+    page.getByRole('heading', { name: 'Choose a Platform' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('navigation', { name: 'Launch Steps' }).getByText('Image'),
+  ).toHaveCount(0);
+  for (const [id, label] of [
+    ['azure', 'Azure'],
+    ['aws', 'AWS'],
+  ]) {
+    await page.getByRole('link', { name: label, exact: true }).click();
+    await expect(page).toHaveURL(
+      `${base}/create/templates/default/container-request?formData=${encodeURIComponent(
+        JSON.stringify({ container: { platform: id } }),
+      )}`,
+    );
+    await expect(page.getByText(label, { exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Platform' })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Change Platform' }).click();
+    await expect(page).toHaveURL(containerLaunchUrl);
+  }
+  await page.getByRole('link', { name: 'Back', exact: true }).click();
+  console.log('CONTAINER LAUNCH UI PASS: platform cards and form prefill');
   await page.getByRole('link', { name: /^Virtual Machines/ }).click();
   await expect(page).toHaveURL(`${base}${vmLaunchPath}`);
   await expect(page.getByRole('button', { name: /vSphere/ })).toBeDisabled();

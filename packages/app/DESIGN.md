@@ -371,10 +371,12 @@ initials avatar. The apparent search field is a trigger, not an inline text inpu
 Active navigation has an ink label and blue underline. Avatar access goes to
 settings, including when the separate settings icon is hidden.
 
-Launch is a card flow with a 32px title, muted subtitle and linked step trail: Product Type › Product ›
-Platform › Image › Configure. Platform cards use provider names without OS copy; vSphere is marked
-**Coming Soon**. Each image card represents one configured OS release. Cards stay disabled while
-availability is checked and are greyed out with **Not available** when the cloud image isn't ready
+Launch is a card flow with a 32px title, muted subtitle and linked step trail. Virtual Machines and
+Containers both start with Product Type › Product › Platform. Containers offers AWS and Azure and
+opens Configure directly, where the platform is shown with a **Change Platform** link. Virtual
+Machines continues through Image before Configure. Its platform cards use provider names without
+OS copy; vSphere is marked **Coming Soon**. Each image card represents one configured OS release.
+Cards stay disabled while availability is checked and are greyed out with **Not available** when the cloud image isn't ready
 or cannot be verified. A sole configured image is preselected only when it's available. The picker
 refreshes availability while open; **Continue** opens the form only for an available selection.
 **Change** returns to the selected image if it is still available.
