@@ -145,7 +145,13 @@ Node 24 (`mise.toml`) and the scaffold's vendored Yarn 4.13.0.
    node cleanup timer) before starting the stack. Launch → Compute → Containers and the Deploy button
    on `/products/compute/containers` open the AWS/Azure platform picker. The request form receives
    the platform as `formData.container.platform` and links back to the picker to change it. Other
-   pages: the container entity card and `/containers/runs/<id>`.
+   pages: the container entity detail and `/containers/runs/<id>`. The detail page shares the
+   compute header layout, puts the endpoint and logs under Connect, and separates Activity,
+   Configuration and Details. Its header and overview share one live status/run poller.
+   The run page shows the catalog
+   link only when the signed-in user can read the container entity with the run's request ID.
+   Provision runs check again while active, and for up to two minutes after a run that registered
+   inventory finishes, to allow for catalog processing.
 - **VM health check** (`plugins/cf-backend/src/observed.ts`, CONTRACTS.md §8.3): only where
   `computeFactory.demoAutomation` is on, a 30-second scheduled task (and a scan after each finished
   day-2 run) scans every platform and keeps each platform's result in memory separately (a failing

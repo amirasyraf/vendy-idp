@@ -36,6 +36,7 @@ export {
   type StageView,
 } from './runs';
 export { getVmConfiguration } from './vmSpec';
+export { ComputeDetailColumns, ComputeEntityHeader } from './VmPage';
 export {
   describeSpecs,
   memoryText,

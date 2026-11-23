@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Content, InfoCard, Link, Page, Progress } from '@backstage/core-components';
+import { useApi } from '@backstage/core-plugin-api';
+import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { Button, Chip, makeStyles } from '@material-ui/core';
 import { Route, Routes, useParams } from 'react-router-dom';
 import type { RunView } from '@internal/plugin-vm-status';
@@ -8,11 +10,17 @@ import { STAGE_LABELS, useContainersApi } from './api';
 const useStyles = makeStyles({
   stage: {
     display: 'grid',
-    gridTemplateColumns: '220px 120px 1fr',
+    gridTemplateColumns: 'minmax(0, 2fr) auto minmax(0, 3fr)',
     gap: 12,
     padding: '10px 0',
     borderBottom: '1px solid #e5e7eb',
     alignItems: 'baseline',
+    overflowWrap: 'anywhere',
+    '@media (max-width: 620px)': {
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      rowGap: 4,
+      '& > span:last-child': { gridColumn: '1 / -1' },
+    },
   },
   error: { color: '#b42318', whiteSpace: 'pre-wrap' },
   muted: { color: '#667085' },
@@ -23,6 +31,76 @@ const COLORS: Record<string, 'default' | 'primary' | 'secondary'> = {
   retrying: 'primary',
   failed: 'secondary',
 };
+
+function ContainerCatalogLink({ run }: { run: RunView }) {
+  const classes = useStyles();
+  const catalog = useApi(catalogApiRef);
+  const [state, setState] = useState<
+    'checking' | 'waiting' | 'visible' | 'missing' | 'unavailable'
+  >('checking');
+  const { name, requestId, status, kind, finishedAt } = run;
+  const registered = run.stages.some(
+    stage => stage.id === 'register' && stage.status === 'success',
+  );
+
+  useEffect(() => {
+    let disposed = false;
+    let timer: number | undefined;
+    // A successful registration does not mean Backstage has processed the entity yet.
+    const deadline =
+      finishedAt && registered ? Date.parse(finishedAt) + 120_000 : 0;
+    const shouldWait = () =>
+      kind === 'provision' && (status === 'running' || Date.now() < deadline);
+
+    const check = async () => {
+      try {
+        const entity = await catalog.getEntityByRef({
+          kind: 'resource',
+          namespace: 'default',
+          name,
+        });
+        if (disposed) return;
+        if (
+          entity?.spec?.type === 'container' &&
+          entity.metadata.annotations?.['cf/request-id'] === requestId
+        ) {
+          setState('visible');
+          return;
+        }
+        setState(shouldWait() ? 'waiting' : 'missing');
+      } catch {
+        if (disposed) return;
+        setState('unavailable');
+      }
+      if (shouldWait()) timer = window.setTimeout(check, 5000);
+    };
+
+    check();
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+    };
+  }, [catalog, finishedAt, kind, name, registered, requestId, status]);
+
+  if (state === 'visible') {
+    return (
+      <p>
+        <Link to={`/catalog/default/resource/${encodeURIComponent(name)}`}>
+          Open container page →
+        </Link>
+      </p>
+    );
+  }
+  return (
+    <p className={classes.muted} role="status">
+      {state === 'checking' && 'Checking for the container page…'}
+      {state === 'waiting' &&
+        'Waiting for the container to appear in the catalog…'}
+      {state === 'missing' && 'No catalog entry is available for this run.'}
+      {state === 'unavailable' && 'Could not check the container catalog entry.'}
+    </p>
+  );
+}
 
 export function RunStages({ run }: { run: RunView }) {
   const classes = useStyles();
@@ -84,9 +162,9 @@ function RunPage() {
         title={`${run.kind === 'provision' ? 'Deploy' : run.kind} ${run.name} — run #${run.id}`}
         subheader={`Status: ${run.status}${run.error ? ` — ${run.error}` : ''}`}
       >
-        <p>
-          <Link to={`/catalog/default/resource/${run.name}`}>Open container page →</Link>
-        </p>
+        {!(run.kind === 'destroy' && run.status === 'succeeded') && (
+          <ContainerCatalogLink key={`${run.name}:${run.requestId}`} run={run} />
+        )}
         <RunStages run={run} />
         {run.actions.retry && (
           <Button

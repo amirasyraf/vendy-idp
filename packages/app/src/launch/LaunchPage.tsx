@@ -26,6 +26,7 @@ import {
   products,
   virtualMachines,
 } from '../products/catalog';
+import { LaunchIcon } from './LaunchIcon';
 
 const useStyles = makeStyles(theme => ({
   root: {
@@ -82,6 +83,16 @@ const useStyles = makeStyles(theme => ({
   name: { fontSize: 20, fontWeight: 700, color: vmColors.ink },
   detail: { fontSize: 13, color: vmColors.mute, marginTop: 8 },
   soon: { marginTop: 8, fontSize: 12, color: vmColors.mute },
+  choiceLine: { display: 'flex', alignItems: 'center', gap: 12 },
+  imageGroup: {
+    '& + &': { marginTop: 24 },
+  },
+  imageGroupTitle: {
+    color: vmColors.ink,
+    margin: '0 0 10px',
+    fontSize: 16,
+    lineHeight: 1.25,
+  },
   image: {
     cursor: 'pointer',
     flexDirection: 'row',
@@ -95,13 +106,25 @@ const useStyles = makeStyles(theme => ({
     '& $name': { color: theme.palette.text.secondary },
     '&:hover': { borderColor: theme.palette.divider },
   },
-  imageText: { display: 'flex', flexDirection: 'column' },
-  radio: { accentColor: vmColors.blue, width: 17, height: 17, margin: 0 },
+  imageText: { display: 'flex', flexDirection: 'column', minWidth: 0 },
+  radio: {
+    accentColor: vmColors.blue,
+    width: 17,
+    height: 17,
+    margin: '0 0 0 auto',
+    order: 1,
+    flexShrink: 0,
+  },
   actions: { display: 'flex', gap: 16, alignItems: 'center', marginTop: 28 },
 }));
 
 const vmSteps = ['Product Type', 'Product', 'Platform', 'Image', 'Configure'];
 const containerSteps = ['Product Type', 'Product', 'Platform', 'Configure'];
+const imageFamilies = [
+  { id: 'linux', title: 'Linux Distributions' },
+  { id: 'windows', title: 'Windows' },
+  { id: 'other', title: 'Other Operating Systems' },
+];
 
 function Shell({
   step,
@@ -207,7 +230,10 @@ function LaunchFlow() {
                 to={`/launch/${item.id}`}
                 className={classes.card}
               >
-                <span className={classes.name}>{item.title}</span>
+                <span className={classes.choiceLine}>
+                  <LaunchIcon id={item.id} />
+                  <span className={classes.name}>{item.title}</span>
+                </span>
                 <span className={classes.detail}>{item.description}</span>
               </Link>
             ))}
@@ -240,7 +266,10 @@ function LaunchFlow() {
         <div className={classes.grid}>
           {listed.map(item => (
             <Link key={item.id} to={launchPath(item)} className={classes.card}>
-              <span className={classes.name}>{item.title}</span>
+              <span className={classes.choiceLine}>
+                <LaunchIcon id={item.id} />
+                <span className={classes.name}>{item.title}</span>
+              </span>
               <span className={classes.detail}>{item.description}</span>
             </Link>
           ))}
@@ -339,11 +368,17 @@ function Platforms({
               to={`${productLaunch}/${encodeURIComponent(platform.id)}`}
               className={classes.card}
             >
-              <span className={classes.name}>{platform.label}</span>
+              <span className={classes.choiceLine}>
+                <LaunchIcon id={platform.id} />
+                <span className={classes.name}>{platform.label}</span>
+              </span>
             </Link>
           ) : (
             <ButtonBase key={platform.id} className={classes.card} disabled>
-              <span className={classes.name}>{platform.label}</span>
+              <span className={classes.choiceLine}>
+                <LaunchIcon id={platform.id} />
+                <span className={classes.name}>{platform.label}</span>
+              </span>
               <span className={classes.soon}>Coming Soon</span>
             </ButtonBase>
           ),
@@ -378,6 +413,8 @@ function Images({
     platform?.os.flatMap(os =>
       os.versions.map(version => ({
         os: os.id,
+        family:
+          os.family === 'linux' || os.family === 'windows' ? os.family : 'other',
         version,
         label: `${os.label} ${version}`,
         key: `${os.id}:${version}`,
@@ -417,41 +454,55 @@ function Images({
         </p>
       )}
       {options.length > 0 && (
-        <div className={classes.grid} role="radiogroup" aria-label="Image">
-          {options.map(image => (
-            <label
-              key={image.key}
-              className={`${classes.card} ${classes.image} ${
-                selected?.key === image.key ? classes.selected : ''
-              } ${image.available ? '' : classes.imageUnavailable}`}
-            >
-              <input
-                type="radio"
-                name="image"
-                className={classes.radio}
-                checked={selected?.key === image.key}
-                disabled={!image.available}
-                aria-label={image.label}
-                aria-describedby={
-                  image.available ? undefined : `availability-${image.key}`
-                }
-                onChange={() =>
-                  setImageQuery({ image: image.key }, { replace: true })
-                }
-              />
-              <span className={classes.imageText}>
-                <span className={classes.name}>{image.label}</span>
-                {!image.available && (
-                  <span
-                    className={classes.soon}
-                    id={`availability-${image.key}`}
-                  >
-                    {availability ? 'Not available' : 'Checking availability…'}
-                  </span>
-                )}
-              </span>
-            </label>
-          ))}
+        <div role="radiogroup" aria-label="Image">
+          {imageFamilies.map(family => {
+            const images = options.filter(image => image.family === family.id);
+            if (!images.length) return null;
+            return (
+              <section key={family.id} className={classes.imageGroup} aria-labelledby={`images-${family.id}`}>
+                <h2 id={`images-${family.id}`} className={classes.imageGroupTitle}>
+                  {family.title}
+                </h2>
+                <div className={classes.grid}>
+                  {images.map(image => (
+                    <label
+                      key={image.key}
+                      className={`${classes.card} ${classes.image} ${
+                        selected?.key === image.key ? classes.selected : ''
+                      } ${image.available ? '' : classes.imageUnavailable}`}
+                    >
+                      <input
+                        type="radio"
+                        name="image"
+                        className={classes.radio}
+                        checked={selected?.key === image.key}
+                        disabled={!image.available}
+                        aria-label={image.label}
+                        aria-describedby={
+                          image.available ? undefined : `availability-${image.key}`
+                        }
+                        onChange={() =>
+                          setImageQuery({ image: image.key }, { replace: true })
+                        }
+                      />
+                      <LaunchIcon id={image.os} fallback={image.family} />
+                      <span className={classes.imageText}>
+                        <span className={classes.name}>{image.label}</span>
+                        {!image.available && (
+                          <span
+                            className={classes.soon}
+                            id={`availability-${image.key}`}
+                          >
+                            {availability ? 'Not available' : 'Checking availability…'}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
       <div className={classes.actions}>

@@ -193,6 +193,24 @@ let snapshot = {
     stage('finalize', 'pending'),
   ],
 };
+const containerRun = {
+  ...snapshot,
+  id: 43,
+  name: 'spec-container',
+  requestId: 'container-fixture-request',
+  stages: [stage('register', 'running'), stage('deploy', 'pending')],
+};
+let containerCatalogRequestId;
+const containerConfig = {
+  image: 'nginx:alpine',
+  platform: 'aws',
+  arch: 'amd64',
+  size: 'XS',
+  replicas: 1,
+  port: 80,
+  public: true,
+  env: {},
+};
 const browser = await chromium.launch({ headless: true, channel: 'chrome' });
 try {
   const page = await browser.newPage({
@@ -204,6 +222,10 @@ try {
   async function assertRequestLayout(pairs) {
     const panel = page.locator('.vendy-request > article');
     await expect(panel).toBeVisible();
+    await expect(page.locator('.bui-PluginHeader')).toBeHidden();
+    await expect(
+      page.getByRole('navigation', { name: 'Launch breadcrumbs' }),
+    ).toBeVisible();
     expect((await panel.boundingBox()).width).toBeLessThanOrEqual(1080);
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
@@ -659,6 +681,20 @@ try {
         ),
       };
       json = snapshot;
+    } else if (path.endsWith('/containers/runs/43')) {
+      json = containerRun;
+    } else if (path.endsWith('/containers/runs')) {
+      json = { runs: [{ ...containerRun, status: 'succeeded' }] };
+    } else if (path.endsWith('/containers/status/spec-container')) {
+      json = {
+        enabled: true,
+        deployed: true,
+        url: 'https://spec-container.example.test',
+        ready: 1,
+        replicas: 1,
+      };
+    } else if (path.endsWith('/containers/logs/spec-container')) {
+      json = { pod: 'spec-container-fixture', logs: 'Container fixture log' };
     } else if (path.endsWith('/vms/runs/42')) {
       runReads++;
       if (runReadError) {
@@ -819,6 +855,33 @@ try {
     } else if (path.endsWith('/ancestry')) {
       json = { items: [{ entity: vm, parentEntityRefs: [] }] };
     } else if (path.includes('/entities/by-name/')) {
+      if (path.endsWith('/resource/default/spec-container')) {
+        if (!containerCatalogRequestId) {
+          await route.fulfill({
+            status: 404,
+            json: { error: { name: 'NotFoundError', message: 'Not registered' } },
+          });
+          return;
+        }
+        await route.fulfill({
+          json: {
+            apiVersion: 'backstage.io/v1alpha1',
+            kind: 'Resource',
+            metadata: {
+              name: containerRun.name,
+              namespace: 'default',
+              annotations: { 'cf/request-id': containerCatalogRequestId },
+            },
+            spec: {
+              type: 'container',
+              owner: 'group:default/alpha',
+              lifecycle: 'poc',
+              container: containerConfig,
+            },
+          },
+        });
+        return;
+      }
       if (entityGone && path.includes('/resource/')) {
         await route.fulfill({
           status: 404,
@@ -885,6 +948,7 @@ try {
     page.getByText('Quota exceeded', { exact: false }).first(),
   ).toBeVisible();
   await expect(page).toHaveURL(`${base}/create/tasks/${task.id}`);
+  await expect(page.locator('.bui-PluginHeader')).toBeVisible();
   await capture('task-failed');
   taskResult = 'completed';
   task.spec.templateInfo.entityRef = 'template:default/ssh-cert';
@@ -909,7 +973,6 @@ try {
   console.log(
     'TASK HANDOFF PASS: Create → run with history replacement, modify runId and run link; failed/cancelled/non-VM/external URL remain stock; long polling retained',
   );
-  runReadError = true;
   await expect(
     page.getByRole('button', { name: 'Cancel', exact: true }),
   ).toBeVisible();
@@ -918,6 +981,53 @@ try {
   );
   if (streamRequests)
     throw new Error(`Task page opened ${streamRequests} SSE stream(s)`);
+  await page.goto(`${base}/containers/runs/${containerRun.id}`);
+  const openContainer = page.getByRole('link', { name: 'Open container page →' });
+  await expect(
+    page.getByText('Waiting for the container to appear in the catalog…'),
+  ).toBeVisible();
+  await expect(openContainer).toHaveCount(0);
+  containerCatalogRequestId = 'previous-container-request';
+  await page.waitForResponse(
+    response =>
+      new URL(response.url()).pathname.endsWith('/resource/default/spec-container') &&
+      response.ok(),
+    { timeout: 10000 },
+  );
+  await expect(openContainer).toHaveCount(0);
+  containerCatalogRequestId = containerRun.requestId;
+  await expect(openContainer).toHaveAttribute(
+    'href',
+    '/catalog/default/resource/spec-container',
+    { timeout: 10000 },
+  );
+  console.log('CONTAINER RUN PASS: catalog link waits for the matching entry');
+  await openContainer.click();
+  await expect(page.getByRole('heading', { name: 'spec-container' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Container state' })).toHaveText('Ready');
+  for (const section of ['Connect', 'Activity', 'Configuration', 'Details']) {
+    await expect(page.getByRole('heading', { name: section, exact: true })).toBeVisible();
+  }
+  await expect(page.getByText('About', { exact: true })).toHaveCount(0);
+  const containerActions = page.getByRole('group', { name: 'Container actions' });
+  await containerActions.getByRole('button', { name: 'Modify' }).click();
+  await expect(page.getByRole('dialog').getByRole('textbox', { name: 'Image' })).toHaveValue(containerConfig.image);
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await containerActions.getByRole('button', { name: 'Restart' }).click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Restart Container' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await containerActions.getByRole('button', { name: 'More container actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete Container' }).click();
+  const deleteDialog = page.getByRole('dialog');
+  await expect(deleteDialog.getByRole('button', { name: 'Delete Container' })).toBeDisabled();
+  await deleteDialog.getByRole('textbox').fill('spec-container');
+  await expect(deleteDialog.getByRole('button', { name: 'Delete Container' })).toBeEnabled();
+  await deleteDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Show Logs' }).click();
+  await expect(page.getByText(/Container fixture log/)).toBeVisible();
+  await capture('container-details');
+  console.log('CONTAINER DETAIL PASS: custom overview, logs and day-2 dialogs');
+  runReadError = true;
   await page.goto(`${base}/vms/runs/42`);
   await expect(page.getByRole('alert')).toContainText(
     'Run not found or not visible',
@@ -1617,6 +1727,14 @@ try {
   await expect(
     page.getByRole('heading', { name: 'Choose an Image' }),
   ).toBeVisible();
+  for (const [family, image] of [
+    ['Linux Distributions', 'Ubuntu 26.04'],
+    ['Windows', 'Windows Server 2025'],
+  ]) {
+    await expect(
+      page.getByRole('region', { name: family }).getByRole('radio', { name: image }),
+    ).toBeVisible();
+  }
   // Two images (Ubuntu, Windows Server): nothing is preselected.
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   await expect(

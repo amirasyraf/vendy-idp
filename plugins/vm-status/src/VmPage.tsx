@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, ReactNode } from 'react';
 import { Entity } from '@backstage/catalog-model';
 import { Link } from '@backstage/core-components';
 import {
@@ -123,8 +123,6 @@ function VmHeader({
   tabs,
   activeTabId,
 }: EntityHeaderLayoutProps & { initial: Entity }) {
-  const classes = useStyles();
-  const { pathname } = useLocation();
   const live = useVmLive(initial.metadata.name);
   // The live entity follows Modify; the page entity is only the first load.
   const entity = live.entity ?? initial;
@@ -132,51 +130,90 @@ function VmHeader({
   const desired = getVmConfiguration(entity.spec);
   const platforms = usePlatforms();
   const vm = deriveVm(entity, live);
-  const flat = tabs.flatMap(tab => ('items' in tab ? tab.items : [tab]));
+  return (
+    <ComputeEntityHeader
+      entity={entity}
+      productName="Virtual Machines"
+      productHref="/products/compute/virtual-machines"
+      state={{
+        name: 'VM state',
+        label: live.removed ? 'Destroyed' : vm.label,
+        color: vmStateColor(vm.state),
+        failed: vm.state === 'failed',
+      }}
+      actions={!live.removed && (
+        <VmActions entity={entity} vm={vm} onStarted={live.refresh} />
+      )}
+      metadata={
+        <>
+          <li>
+            Team <b>{desired.team}</b>
+          </li>
+          <li>
+            {osLabel(desired.platform, desired.os, platforms)}
+            {desired.imageVersion ? ` ${desired.imageVersion}` : ''} on{' '}
+            {platformLabel(desired.platform, platforms)}
+          </li>
+          <li>{sizeText}</li>
+        </>
+      }
+      tabs={tabs}
+      activeTabId={activeTabId}
+      sectionLabel="VM sections"
+    />
+  );
+}
 
+export function ComputeEntityHeader({
+  entity,
+  productName,
+  productHref,
+  state,
+  actions,
+  metadata,
+  tabs,
+  activeTabId,
+  sectionLabel,
+}: EntityHeaderLayoutProps & {
+  entity: Entity;
+  productName: string;
+  productHref: string;
+  state: { name: string; label: string; color: string; failed?: boolean };
+  actions?: ReactNode;
+  metadata: ReactNode;
+  sectionLabel: string;
+}) {
+  const classes = useStyles();
+  const { pathname } = useLocation();
+  const flat = tabs.flatMap(tab => ('items' in tab ? tab.items : [tab]));
   return (
     <header className={classes.header}>
       <nav className={classes.crumb} aria-label="Breadcrumb">
         <Link to="/catalog">Resources</Link> /{' '}
-        <Link to="/products/compute/virtual-machines">Virtual Machines</Link>
+        <Link to={productHref}>{productName}</Link>
       </nav>
       <div className={classes.titleRow}>
         <h1 className={classes.h1}>
           {entity.metadata.title ?? entity.metadata.name}
         </h1>
-        <span className={classes.pill} role="status" aria-label="VM state">
+        <span className={classes.pill} role="status" aria-label={state.name}>
           <i
+            aria-hidden="true"
             className={classes.dot}
-            style={{ background: vmStateColor(vm.state) }}
+            style={{ background: state.color }}
           />
-          <span
-            style={vm.state === 'failed' ? { color: vmColors.redText } : {}}
-          >
-            {live.removed ? 'Destroyed' : vm.label}
+          <span style={state.failed ? { color: vmColors.redText } : undefined}>
+            {state.label}
           </span>
         </span>
         <span className={classes.star}>
           <FavoriteEntity entity={entity} />
         </span>
-        {!live.removed && (
-          <span className={classes.actions}>
-            <VmActions entity={entity} vm={vm} onStarted={live.refresh} />
-          </span>
-        )}
+        {actions && <div className={classes.actions}>{actions}</div>}
       </div>
-      <ul className={classes.meta}>
-        <li>
-          Team <b>{desired.team}</b>
-        </li>
-        <li>
-          {osLabel(desired.platform, desired.os, platforms)}
-          {desired.imageVersion ? ` ${desired.imageVersion}` : ''} on{' '}
-          {platformLabel(desired.platform, platforms)}
-        </li>
-        <li>{sizeText}</li>
-      </ul>
+      <ul className={classes.meta}>{metadata}</ul>
       {flat.length > 1 ? (
-        <nav className={classes.tabs} aria-label="VM sections">
+        <nav className={classes.tabs} aria-label={sectionLabel}>
           {flat.map(tab => {
             const on = tab.id === activeTabId || pathname.endsWith(tab.href);
             return (
@@ -194,6 +231,23 @@ function VmHeader({
         <div className={classes.spacer} />
       )}
     </header>
+  );
+}
+
+/** Responsive split for the primary cards and the configuration/details column. */
+export function ComputeDetailColumns({
+  primary,
+  details,
+}: {
+  primary: ReactNode;
+  details: ReactNode;
+}) {
+  const classes = useStyles();
+  return (
+    <div className={`${classes.layout} ${classes.withInfo}`}>
+      <div className={classes.column}>{primary}</div>
+      <div className={classes.column}>{details}</div>
+    </div>
   );
 }
 

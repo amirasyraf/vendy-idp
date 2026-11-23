@@ -374,8 +374,9 @@ settings, including when the separate settings icon is hidden.
 Launch is a card flow with a 32px title, muted subtitle and linked step trail. Virtual Machines and
 Containers both start with Product Type › Product › Platform. Containers offers AWS and Azure and
 opens Configure directly, where the platform is shown with a **Change Platform** link. Virtual
-Machines continues through Image before Configure. Its platform cards use provider names without
-OS copy; vSphere is marked **Coming Soon**. Each image card represents one configured OS release.
+Machines continues through Image before Configure. Product and platform cards pair icons with
+text labels; vSphere is marked **Coming Soon**. The image picker groups releases by OS family
+(Linux Distributions, Windows, or Other Operating Systems) and pairs each release with an OS icon.
 Cards stay disabled while availability is checked and are greyed out with **Not available** when the cloud image isn't ready
 or cannot be verified. A sole configured image is preselected only when it's available. The picker
 refreshes availability while open; **Continue** opens the form only for an available selection.
@@ -398,6 +399,12 @@ no instance exists, only Destroy is enabled (disabled buttons say why in a toolt
   need a running VM when its observation is fresh. The OS-update confirmation currently says
   Ubuntu even on Windows; the selected stage uses the correct guest updater.
 Section tabs appear only when there is more than one; otherwise a spacer is used.
+
+Container details use the same header and two-column hierarchy as VM details rather than the
+stock Overview and About cards. Connect (public endpoint and logs) and Activity (current stages
+and run history) lead on the left; Configuration and Details (live replicas, pods and inventory)
+sit on the right and stack below on narrow screens. The header offers Restart and Modify;
+Delete Container is in the overflow menu and requires typing the container name.
 The stock About card is hidden only for VMs. The header and body share one poller per VM
 (`vmLive.ts`): the last 10 runs (`/runs?name=<vm>&limit=10`, every five seconds), the
 health check (`/observed/<vm>`, every 15 seconds) and the catalog entity (every ten seconds,
@@ -489,11 +496,12 @@ Demo controls and the compute picker's restrictions discover `vms`, using
   long-poll workaround remains unchanged; no SSE is reintroduced.
 - **Request forms:** VM and container launch use a centered workspace, a compact
   horizontal Configure/Review stepper, and a tinted summary for the platform choice.
+  They show Vendy's Launch breadcrumb instead of Scaffolder's Create breadcrumb and tabs.
   Name and team sit side by side on desktop with matching control heights and
   helper-text spacing; the container form also pairs port with
   architecture and size with replicas. Narrow viewports use one field per row.
   The stock Scaffolder validation, review and task submission are unchanged. Other
-  templates keep the stock layout.
+  templates and task pages keep the stock navigation.
 - **VM context-menu omission:** custom VM headers do not expose stock unregister
   or inspect menus, including for admins. Destroy remains the supported VM-removal
   route. Do not promise these menus as part of the VM-page action inventory.

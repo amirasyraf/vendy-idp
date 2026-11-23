@@ -4,13 +4,16 @@ import {
   createRouteRef,
   PageBlueprint,
 } from '@backstage/frontend-plugin-api';
-import { EntityCardBlueprint } from '@backstage/plugin-catalog-react/alpha';
+import {
+  EntityContentLayoutBlueprint,
+  EntityHeaderLayoutBlueprint,
+} from '@backstage/plugin-catalog-react/alpha';
 import { containers, productPath } from '../products/catalog';
 
 const isContainer = (entity: Entity) =>
   entity.kind.toLowerCase() === 'resource' && entity.spec?.type === 'container';
 
-// Compute -> Containers: run pages, the product page and the container entity card.
+// Compute -> Containers: run pages, product page and catalog entity layout.
 export const containersPlugin = createFrontendPlugin({
   pluginId: 'containers',
   extensions: [
@@ -33,11 +36,18 @@ export const containersPlugin = createFrontendPlugin({
         loader: async () => import('./ContainersProductPage').then(m => <m.ContainersProductPage />),
       },
     }),
-    EntityCardBlueprint.make({
+    EntityHeaderLayoutBlueprint.make({
       name: 'container',
       params: {
         filter: isContainer,
-        loader: async () => import('./ContainerCard').then(m => <m.ContainerCard />),
+        loader: async () => (await import('./ContainerCard')).ContainerHeaderLayout,
+      },
+    }),
+    EntityContentLayoutBlueprint.make({
+      name: 'container',
+      params: {
+        filter: isContainer,
+        loader: async () => (await import('./ContainerCard')).ContainerOverview,
       },
     }),
   ],

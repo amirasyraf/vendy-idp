@@ -1,4 +1,9 @@
 /* Scoped to the VM and container request pages; other Scaffolder forms stay stock. */
+/* Backstage renders the plugin header and the request layout as siblings. */
+.bui-PluginHeader:has(+ .vendy-request) {
+  display: none;
+}
+
 .vendy-request {
   --request-gutter: clamp(16px, 4vw, 36px);
   background: #f7f8fa;
