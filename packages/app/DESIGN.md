@@ -375,7 +375,8 @@ Launch is a card flow with a 32px title, muted subtitle and linked step trail. V
 Containers both start with Product Type › Product › Platform. Containers offers AWS and Azure and
 opens Configure directly, where the platform is shown with a **Change Platform** link. Virtual
 Machines continues through Image before Configure. Product and platform cards pair icons with
-text labels; vSphere is marked **Coming Soon**. The image picker groups releases by OS family
+text labels; the AWS card uses AWS's own wordmark and smile, and vSphere is marked **Coming Soon**.
+The image picker groups releases by OS family
 (Linux Distributions, Windows, or Other Operating Systems) and pairs each release with an OS icon.
 Cards stay disabled while availability is checked and are greyed out with **Not available** when the cloud image isn't ready
 or cannot be verified. A sole configured image is preselected only when it's available. The picker

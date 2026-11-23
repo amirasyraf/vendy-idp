@@ -1671,7 +1671,13 @@ try {
     ['azure', 'Azure'],
     ['aws', 'AWS'],
   ]) {
-    await page.getByRole('link', { name: label, exact: true }).click();
+    const card = page.getByRole('link', { name: label, exact: true });
+    if (id === 'aws') {
+      await expect.poll(() =>
+        card.locator('img[src="/aws-mark.svg"]').evaluate(el => el.naturalWidth),
+      ).toBeGreaterThan(0);
+    }
+    await card.click();
     await expect(page).toHaveURL(
       `${base}/create/templates/default/container-request?formData=${encodeURIComponent(
         JSON.stringify({ container: { platform: id } }),

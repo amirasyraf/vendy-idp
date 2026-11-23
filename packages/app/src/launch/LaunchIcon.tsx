@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { makeStyles, SvgIcon } from '@material-ui/core';
-import CloudQueue from '@material-ui/icons/CloudQueue';
 import Code from '@material-ui/icons/Code';
 import DnsOutlined from '@material-ui/icons/DnsOutlined';
 import LayersOutlined from '@material-ui/icons/LayersOutlined';
@@ -15,6 +14,7 @@ const useStyles = makeStyles({
     borderRadius: 8,
     flex: '0 0 36px',
     '& svg': { width: 22, height: 22 },
+    '& img': { width: 28, height: 'auto' },
   },
 });
 
@@ -22,7 +22,7 @@ const icons: Record<string, [string, string, ReactNode]> = {
   compute: ['#0B5FD3', '#EAF2FF', <Storage />],
   'virtual-machines': ['#0B5FD3', '#EAF2FF', <DnsOutlined />],
   containers: ['#0B5FD3', '#EAF2FF', <LayersOutlined />],
-  aws: ['#995300', '#FFF3E0', <CloudQueue />],
+  aws: ['#232F3E', '#FFF3E0', <img src="/aws-mark.svg" alt="" />],
   azure: [
     '#006EB6',
     '#EAF5FF',
