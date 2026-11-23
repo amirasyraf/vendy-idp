@@ -13,6 +13,7 @@ import { scaffolderApiRef } from '@backstage/plugin-scaffolder-react';
 import { FormFieldBlueprint } from '@backstage/plugin-scaffolder-react/alpha';
 import { PollingScaffolderClient } from './taskEventPolling';
 import { VmTaskRedirect } from './VmTaskRedirect';
+import { LaunchFormLayout } from './launch/LaunchFormLayout';
 import { SignInPageBlueprint } from '@backstage/plugin-app-react';
 import { PasswordSignInPage } from './PasswordSignInPage';
 import vmStatus from '@internal/plugin-vm-status';
@@ -44,6 +45,20 @@ const clientMonitor = AppRootElementBlueprint.make({
 // Scaffolder customisations; default fields, task UI, logs and controls are preserved.
 const scaffolder = scaffolderPlugin.withOverrides({
   extensions: [
+    scaffolderPlugin.getExtension('sub-page:scaffolder/templates').override({
+      factory(originalFactory) {
+        const original = originalFactory();
+        return Array.from(original, output =>
+          output.id === coreExtensionData.reactElement.id
+            ? coreExtensionData.reactElement(
+                <LaunchFormLayout>
+                  {original.get(coreExtensionData.reactElement)}
+                </LaunchFormLayout>,
+              )
+            : output,
+        );
+      },
+    }),
     FormFieldBlueprint.make({
       name: 'container-platform',
       params: {

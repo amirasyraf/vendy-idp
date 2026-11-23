@@ -200,6 +200,28 @@ try {
   });
   const errors = [];
   const screenshotDir = process.env.WORKFLOW_UI_SCREENSHOTS;
+  async function assertRequestLayout(pairs) {
+    const panel = page.locator('.vendy-request > article');
+    await expect(panel).toBeVisible();
+    expect((await panel.boundingBox()).width).toBeLessThanOrEqual(1080);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      for (const [first, second] of pairs) {
+        const a = await panel.locator(first).boundingBox();
+        const b = await panel.locator(second).boundingBox();
+        if (width === 1440) {
+          expect(Math.abs(a.y - b.y)).toBeLessThan(16);
+          expect(b.x).toBeGreaterThan(a.x + a.width);
+        } else {
+          expect(b.y).toBeGreaterThan(a.y + a.height);
+        }
+      }
+      expect(await panel.evaluate(el => el.scrollWidth)).toBeLessThanOrEqual(
+        Math.ceil((await panel.boundingBox()).width),
+      );
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
   async function capture(name) {
     if (!screenshotDir) return;
     await mkdir(screenshotDir, { recursive: true });
@@ -654,7 +676,10 @@ try {
               type: 'object',
               required: ['container'],
               properties: {
+                name: { title: 'Name', type: 'string' },
+                team: { title: 'Owning Team', type: 'string' },
                 container: {
+                  title: 'Container',
                   type: 'object',
                   required: ['platform'],
                   properties: {
@@ -664,6 +689,25 @@ try {
                       enum: ['aws', 'azure'],
                       'ui:field': 'ContainerPlatform',
                     },
+                    image: { title: 'Image', type: 'string' },
+                    port: {
+                      title: 'Container Port',
+                      type: 'integer',
+                      default: 80,
+                    },
+                    arch: {
+                      title: 'Architecture',
+                      type: 'string',
+                      enum: ['amd64', 'arm64'],
+                      default: 'amd64',
+                    },
+                    size: {
+                      title: 'Size',
+                      type: 'string',
+                      enum: ['XS', 'S', 'M'],
+                      default: 'XS',
+                    },
+                    replicas: { title: 'Replicas', type: 'integer', default: 1 },
                   },
                 },
               },
@@ -680,6 +724,8 @@ try {
             schema: {
               type: 'object',
               properties: {
+                name: { title: 'VM Name', type: 'string' },
+                team: { title: 'Owning Team', type: 'string' },
                 compute: {
                   title: 'Compute',
                   type: 'object',
@@ -1488,6 +1534,14 @@ try {
     );
     await expect(page.getByText(label, { exact: true })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Platform' })).toHaveCount(0);
+    if (id === 'aws') {
+      await assertRequestLayout([
+        ['#root_name', '#root_team'],
+        ['#root_container_port', '#root_container_arch'],
+        ['#root_container_size', '#root_container_replicas'],
+      ]);
+      await capture('launch-configure-container');
+    }
     await page.getByRole('link', { name: 'Change Platform' }).click();
     await expect(page).toHaveURL(containerLaunchUrl);
   }
@@ -1519,6 +1573,7 @@ try {
   await page.getByRole('radio', { name: 'Ubuntu 24.04' }).check();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Ubuntu 24.04', { exact: true })).toBeVisible();
+  await capture('launch-configure-vm');
   await page.getByRole('link', { name: 'Change', exact: true }).click();
   await expect(page.getByRole('radio', { name: 'Ubuntu 24.04' })).toBeChecked();
   await page.getByRole('link', { name: 'Back', exact: true }).click();
@@ -1573,6 +1628,7 @@ try {
   await expect(
     azureTypes.getByRole('radio', { name: 'Standard_B2ts_v2' }),
   ).toBeEnabled();
+  await assertRequestLayout([['#root_name', '#root_team']]);
   await capture('launch-configure');
   await page.getByRole('link', { name: 'Change', exact: true }).click();
   await page.getByRole('radio', { name: 'Windows Server 2025' }).check();

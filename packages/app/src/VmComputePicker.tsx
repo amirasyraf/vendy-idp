@@ -78,7 +78,7 @@ const memorySteps = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 const useStyles = makeStyles(theme => ({
   cards: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))',
     gap: theme.spacing(1.5),
     marginTop: theme.spacing(1),
   },
@@ -128,7 +128,11 @@ const useStyles = makeStyles(theme => ({
     alignItems: 'center',
     margin: theme.spacing(1.5, 0),
   },
-  table: { maxHeight: 440, border: `1px solid ${theme.palette.divider}` },
+  table: {
+    maxHeight: 440,
+    border: `1px solid ${theme.palette.divider}`,
+    '& .MuiTable-root': { minWidth: 640 },
+  },
   familyRow: {
     background: theme.palette.action.hover,
     fontWeight: 700,
@@ -680,7 +684,10 @@ function VmComputePickerField({
 
   return (
     <Box my={2}>
-      <Paper variant="outlined" className={classes.chosen}>
+      <Paper
+        variant="outlined"
+        className={`${classes.chosen} vendy-launch-selection`}
+      >
         <div>
           <small>Platform</small>
           <b>{cloud}</b>

@@ -457,7 +457,8 @@ and checks that the new-version banner appears; on the dev server that check is 
 `scripts/workflow-ui.mjs` uses installed Google Chrome and fixture API responses to check the served
  frontend without signing in, dispatching a workflow or changing backend state. It also walks
   Home → Compute / Virtual Machines, Launch → Compute → Containers → platform → form, and
-  Launch → Compute → Virtual Machines → platform → image. A
+  Launch → Compute → Virtual Machines → platform → image. It checks that both request forms pair
+  related fields on desktop and stack them on mobile without horizontal overflow. A
  multi-release AWS fixture checks selection and submitted form payload; Azure checks that two images
  (Ubuntu, Windows Server) are not preselected, live-size presentation with a quota-blocked size, Azure tag rules, and
  (switching to Windows Server 2025) software checkboxes per OS family and the 4 GiB memory minimum in the

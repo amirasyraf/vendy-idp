@@ -487,10 +487,12 @@ Demo controls and the compute picker's restrictions discover `vms`, using
   SSH certificates) retain the stock task page, errors, logs, controls and output.
   Removed workflow-progress events have no custom renderer. The task-event
   long-poll workaround remains unchanged; no SSE is reintroduced.
-- **Template/form residue:** template card headers are reordered/styled by the
-  theme, but their glyphs remain stock. The request-form stepper and its spacing
-  gap are still stock; no owned correction is implemented. Their rendered extent
-  has not been rechecked for this document.
+- **Request forms:** VM and container launch use a centered workspace, a compact
+  horizontal Configure/Review stepper, and a tinted summary for the platform choice.
+  Name and team sit side by side on desktop; the container form also pairs port with
+  architecture and size with replicas. Narrow viewports use one field per row.
+  The stock Scaffolder validation, review and task submission are unchanged. Other
+  templates keep the stock layout.
 - **VM context-menu omission:** custom VM headers do not expose stock unregister
   or inspect menus, including for admins. Destroy remains the supported VM-removal
   route. Do not promise these menus as part of the VM-page action inventory.

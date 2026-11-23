@@ -81,6 +81,9 @@ const useStyles = makeStyles(theme => ({
     gridTemplateColumns: 'minmax(160px, 1fr) minmax(200px, 2fr) 40px',
     gap: theme.spacing(1),
     alignItems: 'start',
+    '@media (max-width: 600px)': {
+      gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr) 32px',
+    },
   },
   head: {
     fontSize: 12,

@@ -10,13 +10,13 @@ function ContainerPlatformField({
 }: FieldExtensionComponentProps<string>) {
   const platform = containerPlatforms.find(item => item.id === formData);
   return (
-    <Box my={2}>
-      <Paper variant="outlined">
+    <Box>
+      <Paper variant="outlined" className="vendy-launch-selection">
         <Box
           display="flex"
           alignItems="center"
           justifyContent="space-between"
-          p={2}
+          p={1.5}
         >
           <div>
             <small>Platform</small>

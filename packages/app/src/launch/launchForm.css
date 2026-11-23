@@ -1,0 +1,131 @@
+/* Scoped to the VM and container request pages; other Scaffolder forms stay stock. */
+.vendy-request {
+  --request-gutter: clamp(16px, 4vw, 36px);
+  background: #f7f8fa;
+  padding: 24px 16px 48px;
+  min-height: calc(100vh - var(--cf-topbar, 56px));
+}
+
+.vendy-request-trail,
+.vendy-request > article {
+  max-width: 1080px;
+  margin-inline: auto;
+}
+
+.vendy-request-trail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--bui-fg-secondary);
+  padding: 0 2px 12px;
+}
+
+.vendy-request > article {
+  padding: 0;
+}
+
+.vendy-request > article > .MuiCard-root {
+  border-radius: 12px;
+}
+
+.vendy-request .MuiCard-root > .MuiCardHeader-root {
+  padding: 24px var(--request-gutter) 18px;
+}
+
+.vendy-request .MuiCardHeader-root h2 {
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+.vendy-request [data-testid='info-card-subheader'] {
+  max-width: 65ch;
+  font-size: 14px;
+}
+
+.vendy-request .MuiStepper-root {
+  justify-content: flex-start;
+  align-items: center;
+  background: #fafbfc;
+  border-bottom: 1px solid var(--bui-border-1);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 12px var(--request-gutter);
+}
+
+.vendy-request .MuiStepper-root .MuiStep-root {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  padding: 0;
+}
+
+.vendy-request .MuiStepper-root .MuiStepConnector-root {
+  position: static;
+  flex: 0 0 clamp(12px, 3vw, 32px);
+  margin-inline: clamp(6px, 1.2vw, 14px);
+}
+
+.vendy-request .MuiStepper-root .MuiStepLabel-root {
+  flex-direction: row;
+  text-align: left;
+}
+
+.vendy-request .MuiStepper-root .MuiStepLabel-iconContainer {
+  padding-inline: 0 7px;
+}
+
+.vendy-request .MuiStepper-root .MuiStepLabel-label {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.vendy-request .MuiStepper-root + div {
+  padding: 20px var(--request-gutter) 24px;
+  min-width: 0;
+}
+
+.vendy-request form.rjsf .MuiGrid-item {
+  /* RJSF MUI's default item margin is inline. */
+  margin-bottom: 2px !important;
+  min-width: 0;
+}
+
+.vendy-request form.rjsf > .field-object > .MuiFormControl-root > .MuiGrid-container {
+  margin-top: 0 !important;
+}
+
+.vendy-request .vendy-launch-selection {
+  background: #f4f8ff;
+  border-color: #d6e4fa;
+}
+
+.vendy-request .MuiStepper-root + div:not(:has(form.rjsf)) .MuiTableCell-root {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 700px) {
+  /* Match field IDs, rather than positions, so schema fields can be reordered. */
+  .vendy-request form.rjsf .MuiGrid-item:not(:has(.MuiGrid-container)):has(
+      :is(
+        #root_name,
+        #root_team,
+        #OwnershipEntityRefPicker-dropdown,
+        #root_container_port,
+        #root_container_arch,
+        #root_container_size,
+        #root_container_replicas
+      )
+    ) {
+    flex-basis: 50%;
+    max-width: 50%;
+  }
+}
+
+@media (max-width: 480px) {
+  .vendy-request {
+    padding-inline: 10px;
+  }
+}
