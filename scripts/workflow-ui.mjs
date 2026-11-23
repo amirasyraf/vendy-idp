@@ -200,6 +200,7 @@ try {
   });
   const errors = [];
   const screenshotDir = process.env.WORKFLOW_UI_SCREENSHOTS;
+  const nameAndTeam = ['#root_name', '#OwnershipEntityRefPicker-dropdown'];
   async function assertRequestLayout(pairs) {
     const panel = page.locator('.vendy-request > article');
     await expect(panel).toBeVisible();
@@ -207,13 +208,31 @@ try {
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       for (const [first, second] of pairs) {
-        const a = await panel.locator(first).boundingBox();
-        const b = await panel.locator(second).boundingBox();
+        const bounds = selector =>
+          panel.locator(selector).evaluate(field => {
+            const border = field.closest('.MuiOutlinedInput-root');
+            const { x, y, width, height } = border.getBoundingClientRect();
+            const helper = field.closest('.MuiGrid-item').querySelector('p');
+            return {
+              x,
+              y,
+              width,
+              height,
+              helpY: helper?.getBoundingClientRect().y,
+            };
+          });
+        const [a, b] = await Promise.all([bounds(first), bounds(second)]);
         if (width === 1440) {
-          expect(Math.abs(a.y - b.y)).toBeLessThan(16);
+          expect(Math.abs(a.y - b.y)).toBeLessThan(1);
           expect(b.x).toBeGreaterThan(a.x + a.width);
         } else {
           expect(b.y).toBeGreaterThan(a.y + a.height);
+        }
+        expect(Math.abs(a.height - b.height)).toBeLessThan(1);
+        if (second === nameAndTeam[1]) {
+          expect(a.helpY).toBeDefined();
+          expect(b.helpY).toBeDefined();
+          expect(Math.abs(a.helpY - a.y - (b.helpY - b.y))).toBeLessThan(1);
         }
       }
       expect(await panel.evaluate(el => el.scrollWidth)).toBeLessThanOrEqual(
@@ -676,8 +695,16 @@ try {
               type: 'object',
               required: ['container'],
               properties: {
-                name: { title: 'Name', type: 'string' },
-                team: { title: 'Owning Team', type: 'string' },
+                name: {
+                  title: 'Name',
+                  type: 'string',
+                  description: 'Unique lowercase name, 3–21 characters.',
+                },
+                team: {
+                  title: 'Owning Team',
+                  type: 'string',
+                  'ui:field': 'MyGroupsPicker',
+                },
                 container: {
                   title: 'Container',
                   type: 'object',
@@ -724,8 +751,16 @@ try {
             schema: {
               type: 'object',
               properties: {
-                name: { title: 'VM Name', type: 'string' },
-                team: { title: 'Owning Team', type: 'string' },
+                name: {
+                  title: 'VM Name',
+                  type: 'string',
+                  description: 'Unique lowercase name, 3–21 characters.',
+                },
+                team: {
+                  title: 'Owning Team',
+                  type: 'string',
+                  'ui:field': 'MyGroupsPicker',
+                },
                 compute: {
                   title: 'Compute',
                   type: 'object',
@@ -1536,7 +1571,7 @@ try {
     await expect(page.getByRole('combobox', { name: 'Platform' })).toHaveCount(0);
     if (id === 'aws') {
       await assertRequestLayout([
-        ['#root_name', '#root_team'],
+        nameAndTeam,
         ['#root_container_port', '#root_container_arch'],
         ['#root_container_size', '#root_container_replicas'],
       ]);
@@ -1628,7 +1663,7 @@ try {
   await expect(
     azureTypes.getByRole('radio', { name: 'Standard_B2ts_v2' }),
   ).toBeEnabled();
-  await assertRequestLayout([['#root_name', '#root_team']]);
+  await assertRequestLayout([nameAndTeam]);
   await capture('launch-configure');
   await page.getByRole('link', { name: 'Change', exact: true }).click();
   await page.getByRole('radio', { name: 'Windows Server 2025' }).check();

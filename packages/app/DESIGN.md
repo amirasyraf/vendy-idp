@@ -489,7 +489,8 @@ Demo controls and the compute picker's restrictions discover `vms`, using
   long-poll workaround remains unchanged; no SSE is reintroduced.
 - **Request forms:** VM and container launch use a centered workspace, a compact
   horizontal Configure/Review stepper, and a tinted summary for the platform choice.
-  Name and team sit side by side on desktop; the container form also pairs port with
+  Name and team sit side by side on desktop with matching control heights and
+  helper-text spacing; the container form also pairs port with
   architecture and size with replicas. Narrow viewports use one field per row.
   The stock Scaffolder validation, review and task submission are unchanged. Other
   templates keep the stock layout.

@@ -458,7 +458,8 @@ and checks that the new-version banner appears; on the dev server that check is 
  frontend without signing in, dispatching a workflow or changing backend state. It also walks
   Home → Compute / Virtual Machines, Launch → Compute → Containers → platform → form, and
   Launch → Compute → Virtual Machines → platform → image. It checks that both request forms pair
-  related fields on desktop and stack them on mobile without horizontal overflow. A
+  related fields on desktop, align the name input and owning-team picker's borders and help text,
+  and stack fields on mobile without horizontal overflow. A
  multi-release AWS fixture checks selection and submitted form payload; Azure checks that two images
  (Ubuntu, Windows Server) are not preselected, live-size presentation with a quota-blocked size, Azure tag rules, and
  (switching to Windows Server 2025) software checkboxes per OS family and the 4 GiB memory minimum in the

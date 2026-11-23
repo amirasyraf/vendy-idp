@@ -97,6 +97,22 @@
   margin-top: 0 !important;
 }
 
+/* MyGroupsPicker requests MUI's dense field; match the adjacent name input. */
+.vendy-request .MuiAutocomplete-root:has(#OwnershipEntityRefPicker-dropdown)
+  .MuiFormControl-marginDense {
+  margin-block: 0;
+}
+
+.vendy-request .MuiAutocomplete-root:has(#OwnershipEntityRefPicker-dropdown)
+  .MuiOutlinedInput-root {
+  min-height: 56px;
+}
+
+.vendy-request .MuiAutocomplete-root:has(#OwnershipEntityRefPicker-dropdown)
+  .MuiInputLabel-outlined:not(.MuiInputLabel-shrink) {
+  transform: translate(14px, 20px) scale(1);
+}
+
 .vendy-request .vendy-launch-selection {
   background: #f4f8ff;
   border-color: #d6e4fa;
@@ -111,7 +127,6 @@
   .vendy-request form.rjsf .MuiGrid-item:not(:has(.MuiGrid-container)):has(
       :is(
         #root_name,
-        #root_team,
         #OwnershipEntityRefPicker-dropdown,
         #root_container_port,
         #root_container_arch,
