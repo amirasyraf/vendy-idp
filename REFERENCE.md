@@ -141,8 +141,11 @@ Node 24 (`mise.toml`) and the scaffold's vendored Yarn 4.13.0.
   orchestrator instance (tables `container_runs`/`container_run_stages`, workflow `container-stage.yml`)
   whose `deploy`/`rollout`/`restart`/`undeploy` stages call the k3s API on the host with the
   `vendy-idp` service account mounted at `/kube`. `GET /api/containers/tls-ask` is unauthenticated for
-  Caddy's on-demand TLS. `deploy.sh` runs `cluster-install.sh` (k3s server, both cluster autoscalers,
-   node cleanup timer) before starting the stack. Launch → Compute → Containers and the Deploy button
+   Caddy's on-demand TLS. `deploy.sh` verifies the pulled image and runs `cluster-install.sh`
+   (k3s server, both cluster autoscalers, node cleanup timer) before starting the stack. The
+   installer runs `deploy/azure-autoscaler-secret.cjs` from that image to read
+   `AZURE_READER_SECRET_ID` with the EC2 role and pipe the Kubernetes Secret to `kubectl`;
+   the certificate isn't passed through the deploy env file. Launch → Compute → Containers and the Deploy button
    on `/products/compute/containers` open the AWS/Azure platform picker. The request form receives
    the platform as `formData.container.platform` and links back to the picker to change it. Other
    pages: the container entity detail and `/containers/runs/<id>`. The detail page shares the

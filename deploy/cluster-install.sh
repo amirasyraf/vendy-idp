@@ -4,11 +4,13 @@
 # account and the stale-node cleanup. Idempotent; k3s restarts only when its version or config changes.
 # See vendy/DESIGN.md §13 and vendy/CONTRACTS.md §12.
 set -euo pipefail
-env_file=${1:?usage: cluster-install.sh <env-file>}
+env_file=${1:?usage: cluster-install.sh <env-file> <image-id>}
+image=${2:?usage: cluster-install.sh <env-file> <image-id>}
+[[ "$image" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'cluster-install: invalid image ID' >&2; exit 2; }
 val() { grep -E "^$1=" "$env_file" | head -1 | cut -d= -f2-; }
-for key in K3S_VERSION K3S_TOKEN CA_VERSION IDP_PUBLIC_IP AWS_REGION AWS_WORKER_GROUPS \
+for key in K3S_VERSION K3S_TOKEN CA_VERSION IDP_PUBLIC_IP AWS_REGION AWS_WORKER_GROUPS AZURE_READER_SECRET_ID \
   AZURE_SUBSCRIPTION_ID AZURE_TENANT_ID AZURE_WORKERS_RG AZURE_WORKER_SCALE_SETS \
-  AZURE_AUTOSCALER_CLIENT_ID AZURE_AUTOSCALER_CERT_B64; do
+  AZURE_AUTOSCALER_CLIENT_ID; do
   [[ -n "$(val "$key")" ]] || { echo "cluster-install: missing $key" >&2; exit 2; }
 done
 k3s_version=$(val K3S_VERSION)
@@ -112,14 +114,11 @@ umask 022
 # 3. Cluster Autoscaler, one per cloud (DESIGN.md §13.4). Each has its own leader lease and status
 # config map, and manages only its own explicit node groups.
 nodes_flags() { tr ',' '\n' <<< "$1" | sed 's/^/            - --nodes=0:2:/'; }
-cert=$(val AZURE_AUTOSCALER_CERT_B64)
-kubectl -n kube-system create secret generic cluster-autoscaler-azure \
-  --from-literal=ClientID="$(val AZURE_AUTOSCALER_CLIENT_ID)" \
-  --from-literal=TenantID="$(val AZURE_TENANT_ID)" \
-  --from-literal=SubscriptionID="$(val AZURE_SUBSCRIPTION_ID)" \
-  --from-literal=ResourceGroup="$(val AZURE_WORKERS_RG)" \
-  --from-literal=cert.pem="$(base64 -d <<< "$cert")" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# Only the host role reads the PEM. Turn off Docker logging for the secret-bearing pipe.
+timeout 45 docker run --rm --pull never --log-driver none --entrypoint node \
+  --env AWS_REGION="$(val AWS_REGION)" --env AZURE_READER_SECRET_ID="$(val AZURE_READER_SECRET_ID)" \
+  "$image" /app/deploy/azure-autoscaler-secret.cjs "$(val AZURE_AUTOSCALER_CLIENT_ID)" \
+  "$(val AZURE_TENANT_ID)" "$(val AZURE_SUBSCRIPTION_ID)" "$(val AZURE_WORKERS_RG)" | kubectl apply -f -
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ServiceAccount

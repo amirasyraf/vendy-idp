@@ -13,7 +13,7 @@ else
   [[ -r "$env_file" ]] || { echo 'Env file is not readable' >&2; exit 2; }
   for key in IDP_DOMAIN IDP_USERS_B64 GITHUB_TOKEN POSTGRES_PASSWORD BACKSTAGE_TOKEN AWS_REGION SSH_CA_SECRET_ID AZURE_READER_SECRET_ID \
     K3S_VERSION K3S_TOKEN CA_VERSION IDP_PUBLIC_IP AWS_WORKER_GROUPS AZURE_SUBSCRIPTION_ID AZURE_TENANT_ID AZURE_WORKERS_RG \
-    AZURE_WORKER_SCALE_SETS AZURE_AUTOSCALER_CLIENT_ID AZURE_AUTOSCALER_CERT_B64; do
+    AZURE_WORKER_SCALE_SETS AZURE_AUTOSCALER_CLIENT_ID; do
     grep -qE "^${key}=.+" "$env_file" || { echo "Missing env key: $key" >&2; exit 2; }
   done
   image=${3:-}
@@ -95,10 +95,8 @@ ssh -S "$tunnel" -O exit "$target" 2>/dev/null
 echo "Upload artifact: $((SECONDS - start))s"
 start=$SECONDS
 # The containers cluster (k3s, autoscalers, the IDP's kube credentials in /opt/idp/kube) must be in
-# place before Backstage starts; the script only restarts k3s when its version or config changes.
-ssh "${ssh_opts[@]}" "$target" 'bash /opt/idp/cluster-install.sh /opt/idp/.env' </dev/null
-echo "Containers cluster: $((SECONDS - start))s"
-start=$SECONDS
+# place before Backstage starts. Pull and verify the image first: the installer uses its AWS SDK
+# to read the Azure Reader secret with the host role.
 ssh "${ssh_opts[@]}" "$target" bash -s -- "$image" <<'REMOTE'
 set -euo pipefail
 cd /opt/idp
@@ -106,6 +104,14 @@ expected=$1
 docker compose pull backstage
 actual=$(docker image inspect --format '{{.Id}}' localhost:15000/compute-factory-idp:latest)
 [[ "$actual" == "$expected" ]] || { echo "Pulled $actual, expected $expected; not restarting Backstage" >&2; exit 1; }
+bash ./cluster-install.sh .env "$expected" </dev/null
+REMOTE
+echo "Containers cluster: $((SECONDS - start))s"
+start=$SECONDS
+ssh "${ssh_opts[@]}" "$target" bash -s -- "$image" <<'REMOTE'
+set -euo pipefail
+cd /opt/idp
+expected=$1
 previous_caddy=$(docker compose ps --quiet caddy)
 docker compose up -d --remove-orphans
 container=$(docker compose ps --all --quiet backstage)
