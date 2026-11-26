@@ -31,6 +31,16 @@ export CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2 MAKEFLAGS=-j2
 mise trust "$root/mise.toml" >/dev/null
 yarn=(mise exec -- node .yarn/releases/yarn-4.13.0.cjs)
 timed 'Install dependencies' "${yarn[@]}" install --immutable
+timed 'Validate catalog YAML' mise exec -- node --input-type=module -e '
+  import { readFileSync } from "node:fs";
+  import { parseAllDocuments } from "yaml";
+  const documents = parseAllDocuments(readFileSync("catalog/org.yaml", "utf8"));
+  const errors = documents.flatMap(document => document.errors);
+  if (errors.length) {
+    for (const error of errors) console.error(error.message);
+    process.exit(1);
+  }
+'
 # Both must pass before the image can be packaged. Keep stdout reserved for the image ID.
 timed 'Type check' "${yarn[@]}" tsc >"$lock/tsc.log" 2>&1 &
 tsc_pid=$!
