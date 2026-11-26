@@ -10,8 +10,9 @@ import { hashPassword } from '../plugins/cf-backend/src/passwords/index.js';
 
 const run = promisify(execFile);
 const password = randomUUID();
+const normalUser = 'user1';
 const users = Buffer.from(
-  `amirasyraf:${await hashPassword(password)}\nbob:${await hashPassword(
+  `amirasyraf:${await hashPassword(password)}\n${normalUser}:${await hashPassword(
     password,
   )}`,
 ).toString('base64');
@@ -157,6 +158,15 @@ try {
     await delay(1000);
   }
   if (!ready) throw new Error('Caddy readiness timed out');
+  const requiredRefs = [
+    'group:default/alpha',
+    'group:default/bravo',
+    'group:default/platform-admins',
+    'user:default/amirasyraf',
+    `user:default/${normalUser}`,
+    'location:default/cf-vms',
+    'template:default/ssh-cert',
+  ];
   let refs = [];
   for (let attempt = 0; attempt < 60; attempt++) {
     const response = await fetch(`${baseUrl}/api/catalog/entities`, {
@@ -174,9 +184,7 @@ try {
     );
     if (
       [
-        'user:default/amirasyraf',
-        'location:default/cf-vms',
-        'template:default/ssh-cert',
+        ...requiredRefs,
         'template:default/vm-request',
         'template:default/vm-modify',
       ].every(ref => refs.includes(ref))
@@ -184,15 +192,7 @@ try {
       break;
     await delay(1000);
   }
-  for (const ref of [
-    'group:default/alpha',
-    'group:default/bravo',
-    'group:default/platform-admins',
-    'user:default/amirasyraf',
-    'user:default/bob',
-    'location:default/cf-vms',
-    'template:default/ssh-cert',
-  ]) {
+  for (const ref of requiredRefs) {
     if (!refs.includes(ref)) throw new Error(`Missing ${ref}`);
   }
   const platformTemplates = refs.filter(ref =>
@@ -259,7 +259,7 @@ try {
       'X-Requested-With': 'XMLHttpRequest',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ username: 'bob', password }),
+    body: JSON.stringify({ username: normalUser, password }),
   });
   if (!normalLogin.ok) throw new Error('Normal-user smoke login failed');
   const normal = (await normalLogin.json()).backstageIdentity;

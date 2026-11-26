@@ -449,7 +449,8 @@ The Dockerfile uses Backstage's host-build
 skeleton/bundle approach and installs Linux-native production dependencies in
 the arm64 image; it never copies macOS node_modules. `openssh-client` is present.
 `scripts/smoke.mjs` starts temporary Backstage and Caddy containers with SQLite, a throwaway login,
-and a dummy static token. It checks readiness, catalog locations, mock REST authorization through
+and a dummy static token. It uses the catalog's `amirasyraf` and `user1` entries to check admin and
+non-admin behavior. It checks readiness, catalog locations, mock REST authorization through
 Caddy, demo controls, and the authenticated read API. It runs the fixture browser checks too.
 Automation is off, so it doesn't exercise the orchestrator's own ServiceNow POST, real expiry,
 workflow dispatch, or VM access. No AWS credentials or production config are needed.
