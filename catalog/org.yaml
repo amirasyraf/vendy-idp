@@ -50,6 +50,7 @@ metadata:
   name: amirasyraf
 spec:
   memberOf: [alpha, platform-admins]
+---
 apiVersion: backstage.io/v1alpha1
 kind: User
 metadata:
