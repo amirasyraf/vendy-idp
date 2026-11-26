@@ -28,6 +28,7 @@ timed() {
 
 export NODE_OPTIONS='--no-node-snapshot --max-old-space-size=3072'
 export CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2 MAKEFLAGS=-j2
+mise trust "$root/mise.toml" >/dev/null
 yarn=(mise exec -- node .yarn/releases/yarn-4.13.0.cjs)
 timed 'Install dependencies' "${yarn[@]}" install --immutable
 # Both must pass before the image can be packaged. Keep stdout reserved for the image ID.
