@@ -51,10 +51,12 @@ jobs:
           docker push "$tag"
           reference="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$tag" | grep -F "$IMAGE@")"
           [[ "$reference" == "$IMAGE@"* && "${reference#*@}" =~ ^sha256:[a-f0-9]{64}$ ]]
-          jq -n --arg commit "$GITHUB_SHA" --arg image "$reference" --arg image_id "$IDP_IMAGE" \
+          config_id="$(docker buildx imagetools inspect --raw "$reference" | jq -er '.config.digest')"
+          [[ "$config_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+          jq -n --arg commit "$GITHUB_SHA" --arg image "$reference" --arg image_id "$config_id" \
             --arg run_id "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
             '{commit:$commit,image:$image,image_id:$image_id,run_id:$run_id,attempt:$attempt}' > idp-image.json
-          printf 'Published `%s` (%s)\n' "$reference" "$IDP_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Published `%s` (config `%s`)\n' "$reference" "$config_id" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: idp-image-${{ github.run_attempt }}

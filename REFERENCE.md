@@ -503,8 +503,9 @@ dependencies, bundle, or package the image again. It copies the Compose and Cadd
 ships it through a `registry:2` service on the host,
 bound to `127.0.0.1:15000` there and reached through an SSH tunnel on local port 15000:
 `docker push` uploads only compressed layers the host lacks (usually just the app bundle), and the
-host pulls `localhost:15000/compute-factory-idp:latest`. The rollout verifies the pulled and running image
-IDs match, and reports deployment timings. A fresh Caddy reads its config at startup; the script
+host pulls `localhost:15000/compute-factory-idp:latest`. The rollout verifies the exact pushed
+manifest digest, then checks that the running container uses the pulled image ID on that host.
+A fresh Caddy reads its config at startup; the script
 reloads a reused running Caddy with bounded retries. The first deployment to a new host sends all
 layers. Requires Docker, local Compose, and the local
 `~/.ssh/id_ed25519`. It is non-interactive, uses disposable-host SSH options
@@ -520,8 +521,10 @@ Only `./poc up` waits for cloud-init, configures DNS, and restores saved TLS sto
 
 For `./poc deploy-idp --gha` and `./poc up --gha`, the `build-idp.yml` workflow uses the same build
 and smoke scripts on a native Linux ARM64 runner (bundled Chromium in CI). It publishes only a
-smoke-tested image; `poc` reads the image digest and image ID from the exact successful run. The
-server pulls the digest and stages it locally in the existing registry. Private packages require
+smoke-tested image; `poc` reads the manifest and config digests from the exact successful run. The
+server pulls the manifest digest and stages it locally in the existing registry. This supports both
+classic and containerd Docker image stores, which can report different IDs for the same artifact.
+Private packages require
 separate read-only credentials; the portal's GitHub token is never used for GHCR. No local Docker
 or image upload is involved, and a POC teardown does not delete the reusable GHCR package.
 

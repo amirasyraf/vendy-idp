@@ -56,6 +56,7 @@ trap cleanup EXIT
 # creating one. Keep the tunnel's control socket short and independent of the checkout location.
 socket_dir=$(mktemp -d /tmp/cf-idp.XXXXXX)
 tunnel="$socket_dir/s"
+registry_repo=localhost:15000/compute-factory-idp
 
 if [[ "$prune" == true ]]; then
   ssh "${ssh_opts[@]}" "$target" bash -s <<'REMOTE'
@@ -84,32 +85,37 @@ set -euo pipefail
 ref=$1 expected=$2 stage=$3
 trap 'rm -rf -- "$stage/docker"' EXIT
 timeout 300 docker --config "$stage/docker" pull "$ref"
-meta=$(docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels "com.compute-factory.artifact"}}' "$ref")
-[[ "$meta" == "$expected linux/arm64 idp" ]] || { echo "Unexpected image metadata: $meta" >&2; exit 1; }
-container=$(docker create --pull=never "$expected")
+read -r host_id metadata < <(docker image inspect \
+  --format '{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels "com.compute-factory.artifact"}}' "$ref")
+[[ "$metadata" == 'linux/arm64 idp' && ( "$host_id" == "$expected" || "$host_id" == "${ref#*@}" ) ]] || {
+  echo "Unexpected image metadata: $host_id $metadata" >&2; exit 1;
+}
+docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" | grep -Fx "$ref" >/dev/null
+container=$(docker create --pull=never "$ref")
 trap 'docker rm "$container" >/dev/null; rm -rf -- "$stage/docker"' EXIT
 for file in docker-compose.yml Caddyfile cluster-install.sh; do
   docker cp "$container:/app/deploy/$file" "$stage/$file"
 done
 REMOTE
   ssh "${ssh_opts[@]}" "$target" "umask 077; cat > '$remote_dir/.env'" < "$env_file"
-  ssh "${ssh_opts[@]}" "$target" bash -s -- "$image" "$remote_dir" <<'REMOTE'
+  shipped=$(ssh "${ssh_opts[@]}" "$target" bash -s -- "$reference" "$remote_dir" "$registry_repo" <<'REMOTE'
 set -euo pipefail
-expected=$1 stage=$2
+source_image=$1 stage=$2 registry_repo=$3
 docker compose --env-file "$stage/.env" -f "$stage/docker-compose.yml" config --no-env-resolution --quiet
 install -d -m 700 /opt/idp
 install -m 600 "$stage/.env" /opt/idp/.env
 install -m 644 "$stage"/{docker-compose.yml,Caddyfile,cluster-install.sh} /opt/idp/
 cd /opt/idp
-docker compose up -d registry </dev/null
+docker compose up -d registry </dev/null >&2
 for attempt in $(seq 1 30); do
   if curl -fs --max-time 2 -o /dev/null http://127.0.0.1:15000/v2/; then break; fi
   [[ "$attempt" != 30 ]] || { echo 'IDP registry not ready on the host' >&2; exit 1; }
   sleep 1
 done
-docker tag "$expected" localhost:15000/compute-factory-idp:latest
-timeout 180 docker push localhost:15000/compute-factory-idp:latest
+docker tag "$source_image" "$registry_repo:latest"
+timeout 180 docker push "$registry_repo:latest" | awk '{ print > "/dev/stderr" } $2 == "digest:" && $4 == "size:" {print $3}'
 REMOTE
+  )
   echo "Pulled and staged $reference on the IDP host: $((SECONDS - start))s"
 else
 if [[ -z "$image" ]]; then
@@ -146,27 +152,32 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 [[ "$registry_ready" == true ]] || { echo 'IDP registry not ready through SSH tunnel' >&2; exit 1; }
-docker tag "$image" localhost:15000/compute-factory-idp:latest
-docker push localhost:15000/compute-factory-idp:latest
+docker tag "$image" "$registry_repo:latest"
+shipped=$(docker push "$registry_repo:latest" | awk '{ print > "/dev/stderr" } $2 == "digest:" && $4 == "size:" {print $3}')
 ssh -S "$tunnel" -O exit "$target" 2>/dev/null
 echo "Upload artifact: $((SECONDS - start))s"
 fi
+[[ "$shipped" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Could not verify the registry push digest' >&2; exit 1; }
 start=$SECONDS
 # The containers cluster (k3s, autoscalers, the IDP's kube credentials in /opt/idp/kube) must be in
-# place before Backstage starts. Pull and verify the image first: the installer uses its AWS SDK
-# to read the Azure Reader secret with the host role.
-ssh "${ssh_opts[@]}" "$target" bash -s -- "$image" <<'REMOTE'
+# place before Backstage starts. Verify the exact pushed manifest before using the host-local
+# image ID (which can differ from the runner's) for the installer and running container checks.
+host_image=$(ssh "${ssh_opts[@]}" "$target" bash -s -- "$registry_repo" "$shipped" <<'REMOTE'
 set -euo pipefail
 cd /opt/idp
-expected=$1
-docker compose pull backstage
-actual=$(docker image inspect --format '{{.Id}}' localhost:15000/compute-factory-idp:latest)
-[[ "$actual" == "$expected" ]] || { echo "Pulled $actual, expected $expected; not restarting Backstage" >&2; exit 1; }
-bash ./cluster-install.sh .env "$expected" </dev/null
+repo=$1 digest=$2
+docker compose pull backstage >&2
+docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$repo:latest" | grep -Fx "$repo@$digest" >/dev/null ||
+  { echo "Pulled image does not match $repo@$digest; not restarting Backstage" >&2; exit 1; }
+actual=$(docker image inspect --format '{{.Id}}' "$repo:latest")
+bash ./cluster-install.sh .env "$actual" </dev/null >&2
+printf '%s\n' "$actual"
 REMOTE
+)
+[[ "$host_image" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Could not verify the host image ID' >&2; exit 1; }
 echo "Containers cluster: $((SECONDS - start))s"
 start=$SECONDS
-ssh "${ssh_opts[@]}" "$target" bash -s -- "$image" <<'REMOTE'
+ssh "${ssh_opts[@]}" "$target" bash -s -- "$host_image" <<'REMOTE'
 set -euo pipefail
 cd /opt/idp
 expected=$1
