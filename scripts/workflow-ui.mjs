@@ -211,7 +211,10 @@ const containerConfig = {
   public: true,
   env: {},
 };
-const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+const browser = await chromium.launch({
+  headless: true,
+  ...(process.env.PLAYWRIGHT_BUNDLED_CHROMIUM ? {} : { channel: 'chrome' }),
+});
 try {
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },

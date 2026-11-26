@@ -1,0 +1,63 @@
+name: Build IDP image
+run-name: Build IDP ${{ inputs.commit }}
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Expected commit on main
+        required: true
+        type: string
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main' && github.sha == inputs.commit
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    env:
+      IMAGE: ghcr.io/amirasyraf/vendy-idp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v2
+      - name: Build and type-check
+        id: build
+        run: |
+          set -euo pipefail
+          artifact="$(./deploy/build.sh)"
+          [[ "$artifact" =~ ^sha256:[a-f0-9]{64}$ ]]
+          printf 'artifact=%s\n' "$artifact" >> "$GITHUB_OUTPUT"
+      - name: Smoke-test the built image
+        env:
+          IDP_IMAGE: ${{ steps.build.outputs.artifact }}
+          PLAYWRIGHT_BUNDLED_CHROMIUM: '1'
+        run: |
+          mise exec -- node .yarn/releases/yarn-4.13.0.cjs playwright install --with-deps chromium
+          mise exec -- node scripts/smoke.mjs
+      - name: Publish the tested image
+        env:
+          IDP_IMAGE: ${{ steps.build.outputs.artifact }}
+          PACKAGE_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG
+          DOCKER_CONFIG="$(mktemp -d)"
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$PACKAGE_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          tag="$IMAGE:git-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker tag "$IDP_IMAGE" "$tag"
+          docker push "$tag"
+          reference="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$tag" | grep -F "$IMAGE@")"
+          [[ "$reference" == "$IMAGE@"* && "${reference#*@}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          jq -n --arg commit "$GITHUB_SHA" --arg image "$reference" --arg image_id "$IDP_IMAGE" \
+            --arg run_id "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            '{commit:$commit,image:$image,image_id:$image_id,run_id:$run_id,attempt:$attempt}' > idp-image.json
+          printf 'Published `%s` (%s)\n' "$reference" "$IDP_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: idp-image-${{ github.run_attempt }}
+          path: idp-image.json
+          if-no-files-found: error
+          retention-days: 30

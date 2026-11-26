@@ -494,8 +494,8 @@ Copy `deploy/.env.example` to a gitignored file and fill the eight keys only:
 `IDP_DOMAIN`, `IDP_USERS_B64`, `GITHUB_TOKEN`,
 `POSTGRES_PASSWORD`, `BACKSTAGE_TOKEN`, `AWS_REGION`, `SSH_CA_SECRET_ID`, `AZURE_READER_SECRET_ID`.
 
-The helper takes `./deploy/deploy.sh <host> <env-file> [<image-id>]`. Prefer `./poc deploy-idp`
-from the `vendy` checkout rather than invoking the helper directly.
+The helper takes `./deploy/deploy.sh <host> <env-file> [<image-id> | --ghcr <digest-ref> <image-id>]`.
+Prefer `./poc deploy-idp` from the `vendy` checkout rather than invoking the helper directly.
 
 If no image ID is supplied, this builds one locally for `linux/arm64`. With an ID it does not install
 dependencies, bundle, or package the image again. It copies the Compose and Caddy files from the image,
@@ -516,6 +516,13 @@ checkout share a lock. The maintenance command pauses only the registry during c
 untagged registry data and dangling IDP images, and starts the registry again. Monitor disk usage and
 run it explicitly as needed; avoid running another deploy from a different checkout during maintenance.
 Only `./poc up` waits for cloud-init, configures DNS, and restores saved TLS storage.
+
+For `./poc deploy-idp --gha` and `./poc up --gha`, the `build-idp.yml` workflow uses the same build
+and smoke scripts on a native Linux ARM64 runner (bundled Chromium in CI). It publishes only a
+smoke-tested image; `poc` reads the image digest and image ID from the exact successful run. The
+server pulls the digest and stages it locally in the existing registry. Private packages require
+separate read-only credentials; the portal's GitHub token is never used for GHCR. No local Docker
+or image upload is involved, and a POC teardown does not delete the reusable GHCR package.
 
 First deploy prerequisites owned by the orchestrator:
 

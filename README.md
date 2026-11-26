@@ -42,7 +42,8 @@ instructions](REFERENCE.md#checks) for what the fixtures do and don't prove.
 ## Deploy
 
 From the sibling `vendy` checkout, run `./poc deploy-idp "$image"` to ship the tested image to an
-existing POC host. `./poc up` handles first-time host setup and DNS. Run the
+existing POC host, or `./poc deploy-idp --gha` to build pushed `main` in GitHub Actions and pull the
+tested image directly on the host. `./poc up [--gha]` handles first-time host setup and DNS. Run the
 [signed-in check](REFERENCE.md#checks) after deploying. Don't rebuild or tear down the environment
 just to ship an app change.
 

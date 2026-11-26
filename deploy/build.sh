@@ -54,5 +54,6 @@ cat "$lock/tsc.log" >&2
 
 # A plain single-platform manifest keeps the host-local registry's garbage collection simple.
 timed 'Package Docker image' docker buildx build --platform linux/arm64 --provenance=false --load \
+  --label org.opencontainers.image.source=https://github.com/amirasyraf/vendy-idp \
   -t compute-factory-idp:latest .
 docker image inspect --format '{{.Id}}' compute-factory-idp:latest

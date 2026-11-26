@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
-usage() { echo "Usage: $0 <host> <env-file> [<sha256:image-id>] | --prune <host>" >&2; exit 2; }
+usage() { echo "Usage: $0 <host> <env-file> [<sha256:image-id> | --ghcr <digest-ref> <image-id>] | --prune <host>" >&2; exit 2; }
 prune=false
+reference=""
 if [[ "${1:-}" == --prune ]]; then
   [[ $# -eq 2 ]] || usage
   prune=true
   host=$2
 else
-  [[ $# -ge 2 && $# -le 3 ]] || usage
+  [[ $# == 2 || $# == 3 || ( $# == 5 && $3 == --ghcr ) ]] || usage
   host=$1
   env_file=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
   [[ -r "$env_file" ]] || { echo 'Env file is not readable' >&2; exit 2; }
@@ -16,7 +17,18 @@ else
     AZURE_WORKER_SCALE_SETS AZURE_AUTOSCALER_CLIENT_ID; do
     grep -qE "^${key}=.+" "$env_file" || { echo "Missing env key: $key" >&2; exit 2; }
   done
-  image=${3:-}
+  if [[ $# == 5 ]]; then
+    reference=$4
+    image=$5
+    [[ "$reference" =~ ^ghcr\.io/amirasyraf/vendy-idp@sha256:[0-9a-f]{64}$ ]] || usage
+    [[ "$image" =~ ^sha256:[0-9a-f]{64}$ ]] || usage
+    [[ -z "${GHCR_PULL_USER:-}" && -z "${GHCR_PULL_TOKEN:-}" ||
+      ( "${GHCR_PULL_USER:-}" =~ ^[a-zA-Z0-9-]+$ && -n "${GHCR_PULL_TOKEN:-}" ) ]] || {
+      echo 'Set both GHCR_PULL_USER and GHCR_PULL_TOKEN for a private package' >&2; exit 2;
+    }
+  else
+    image=${3:-}
+  fi
 fi
 [[ "$host" =~ ^[a-zA-Z0-9.-]+$ ]] || { echo 'Invalid host' >&2; exit 2; }
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -28,10 +40,14 @@ ssh_opts=(-i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o ConnectTimeout=15 -o St
 target="ubuntu@$host"
 container=""
 socket_dir=""
+remote_dir=""
 cleanup() {
   if [[ -n "$container" ]]; then docker rm "$container" >/dev/null 2>&1 || true; fi
   if [[ -n "$socket_dir" && -S "$socket_dir/s" ]]; then ssh -S "$socket_dir/s" -O exit "$target" 2>/dev/null || true; fi
   if [[ -n "$socket_dir" ]]; then rm -rf "$socket_dir"; fi
+  if [[ -n "$remote_dir" ]]; then
+    ssh "${ssh_opts[@]}" "$target" "rm -rf -- '$remote_dir'" </dev/null || true
+  fi
   rm -f "$lock/docker-compose.yml" "$lock/Caddyfile" "$lock/cluster-install.sh"
   rmdir "$lock"
 }
@@ -55,6 +71,47 @@ REMOTE
   exit 0
 fi
 
+start=$SECONDS
+if [[ -n "$reference" ]]; then
+  remote_dir=$(ssh "${ssh_opts[@]}" "$target" 'umask 077; mktemp -d /tmp/cf-idp.XXXXXXXX')
+  [[ "$remote_dir" =~ ^/tmp/cf-idp\.[a-zA-Z0-9]{8}$ ]] || { remote_dir=""; exit 1; }
+  if [[ -n "${GHCR_PULL_TOKEN:-}" ]]; then
+    printf '%s' "$GHCR_PULL_TOKEN" | ssh "${ssh_opts[@]}" "$target" \
+      "umask 077; docker --config '$remote_dir/docker' login ghcr.io -u '$GHCR_PULL_USER' --password-stdin"
+  fi
+  ssh "${ssh_opts[@]}" "$target" bash -s -- "$reference" "$image" "$remote_dir" <<'REMOTE'
+set -euo pipefail
+ref=$1 expected=$2 stage=$3
+trap 'rm -rf -- "$stage/docker"' EXIT
+timeout 300 docker --config "$stage/docker" pull "$ref"
+meta=$(docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels "com.compute-factory.artifact"}}' "$ref")
+[[ "$meta" == "$expected linux/arm64 idp" ]] || { echo "Unexpected image metadata: $meta" >&2; exit 1; }
+container=$(docker create --pull=never "$expected")
+trap 'docker rm "$container" >/dev/null; rm -rf -- "$stage/docker"' EXIT
+for file in docker-compose.yml Caddyfile cluster-install.sh; do
+  docker cp "$container:/app/deploy/$file" "$stage/$file"
+done
+REMOTE
+  ssh "${ssh_opts[@]}" "$target" "umask 077; cat > '$remote_dir/.env'" < "$env_file"
+  ssh "${ssh_opts[@]}" "$target" bash -s -- "$image" "$remote_dir" <<'REMOTE'
+set -euo pipefail
+expected=$1 stage=$2
+docker compose --env-file "$stage/.env" -f "$stage/docker-compose.yml" config --no-env-resolution --quiet
+install -d -m 700 /opt/idp
+install -m 600 "$stage/.env" /opt/idp/.env
+install -m 644 "$stage"/{docker-compose.yml,Caddyfile,cluster-install.sh} /opt/idp/
+cd /opt/idp
+docker compose up -d registry </dev/null
+for attempt in $(seq 1 30); do
+  if curl -fs --max-time 2 -o /dev/null http://127.0.0.1:15000/v2/; then break; fi
+  [[ "$attempt" != 30 ]] || { echo 'IDP registry not ready on the host' >&2; exit 1; }
+  sleep 1
+done
+docker tag "$expected" localhost:15000/compute-factory-idp:latest
+timeout 180 docker push localhost:15000/compute-factory-idp:latest
+REMOTE
+  echo "Pulled and staged $reference on the IDP host: $((SECONDS - start))s"
+else
 if [[ -z "$image" ]]; then
   image=$(bash "$root/deploy/build.sh")
   echo "Built artifact $image"
@@ -93,6 +150,7 @@ docker tag "$image" localhost:15000/compute-factory-idp:latest
 docker push localhost:15000/compute-factory-idp:latest
 ssh -S "$tunnel" -O exit "$target" 2>/dev/null
 echo "Upload artifact: $((SECONDS - start))s"
+fi
 start=$SECONDS
 # The containers cluster (k3s, autoscalers, the IDP's kube credentials in /opt/idp/kube) must be in
 # place before Backstage starts. Pull and verify the image first: the installer uses its AWS SDK
