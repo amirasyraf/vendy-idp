@@ -38,6 +38,7 @@ type ObjectInfo = {
   etag: string;
 };
 type ListResult = { folders: string[]; objects: ObjectInfo[]; next?: string };
+type Usage = { objects: number; bytes: number; complete: boolean };
 type Grant = { url: string; headers?: Record<string, string> };
 export type UploadCredentials =
   | {
@@ -54,6 +55,7 @@ export type UploadCredentials =
 export interface BucketStorage {
   provision(target: Target): Promise<void>;
   list(target: Target, prefix: string, cursor?: string): Promise<ListResult>;
+  usage(target: Target): Promise<Usage>;
   stat(target: Target, key: string): Promise<ObjectInfo | undefined>;
   upload(
     target: Target,
@@ -80,6 +82,7 @@ export class MoveIncomplete extends Error {
   }
 }
 const signedSeconds = 5 * 60;
+const usagePageSize = 1000;
 const deadline = () => AbortSignal.timeout(18_000);
 const headersFor = (etag?: string): Record<string, string> =>
   etag ? { 'if-match': etag } : { 'if-none-match': '*' };
@@ -278,6 +281,22 @@ export function awsStorage(options: {
             : [],
         ),
         next: page.NextContinuationToken,
+      };
+    },
+    async usage(target) {
+      const page = await s3.send(
+        new ListObjectsV2Command({
+          ...bucket(target),
+          MaxKeys: usagePageSize,
+          EncodingType: 'url',
+        }),
+        abort(),
+      );
+      const objects = page.Contents ?? [];
+      return {
+        objects: objects.length,
+        bytes: objects.reduce((total, entry) => total + (entry.Size ?? 0), 0),
+        complete: !page.IsTruncated,
       };
     },
     async stat(target, key) {
@@ -524,6 +543,22 @@ export function azureStorage(options: {
           ),
         ),
         next: page.continuationToken || undefined,
+      };
+    },
+    async usage(target) {
+      const pages = (await container(target))
+        .listBlobsFlat({ abortSignal: deadline() })
+        .byPage({ maxPageSize: usagePageSize });
+      const result = await pages.next();
+      if (result.done) return { objects: 0, bytes: 0, complete: true };
+      const page = result.value;
+      return {
+        objects: page.segment.blobItems.length,
+        bytes: page.segment.blobItems.reduce(
+          (total, entry) => total + (entry.properties.contentLength ?? 0),
+          0,
+        ),
+        complete: !page.continuationToken,
       };
     },
     async stat(target, key) {

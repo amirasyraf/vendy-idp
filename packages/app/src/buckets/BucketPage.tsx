@@ -1,4 +1,4 @@
-import { Link } from '@backstage/core-components';
+import { InfoCard, Link } from '@backstage/core-components';
 import {
   Box,
   Button,
@@ -18,19 +18,23 @@ import {
   Typography,
 } from '@material-ui/core';
 import FolderOutlined from '@material-ui/icons/FolderOutlined';
+import { ComputeDetailColumns } from '@internal/plugin-vm-status';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { bucket, productPath } from '../products/catalog';
 import {
   Bucket,
+  BucketDetail,
   BucketError,
   describeError,
   Grant,
   Listing,
   ObjectEntry,
   platformName,
+  statusLabel,
   useBucketRequest,
 } from './api';
+import { BucketDetails, byteLabel } from './BucketDetails';
 import { CredentialsDialog } from './CredentialsDialog';
 import {
   droppedFiles,
@@ -47,15 +51,6 @@ type Transfer = UploadFile & {
   error?: string;
 };
 type Preview = { name: string; url?: string; text?: string };
-const byteLabel = (size: number) => {
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
-  const unit = size
-    ? Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1)
-    : 0;
-  return `${(size / 1024 ** unit).toLocaleString(undefined, {
-    maximumFractionDigits: 1,
-  })} ${units[unit]}`;
-};
 const filename = (key: string) => key.split('/').pop() ?? key;
 const imageTypes: Record<string, string> = {
   png: 'image/png',
@@ -75,13 +70,14 @@ const canPreview = (item: ObjectEntry) =>
 export function BucketPage() {
   const { bucketId } = useParams();
   const request = useBucketRequest();
-  const [item, setItem] = useState<Bucket>();
+  const [item, setItem] = useState<BucketDetail>();
   const [error, setError] = useState('');
+  const [usageRevision, setUsageRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     setItem(undefined);
     setError('');
-    request<Bucket>(`/${bucketId}`, undefined, controller.signal).then(
+    request<BucketDetail>(`/${bucketId}`, undefined, controller.signal).then(
       value => {
         if (!controller.signal.aborted) setItem(value);
       },
@@ -93,7 +89,10 @@ export function BucketPage() {
   }, [bucketId, request]);
   return (
     <Box component="main" p={3}>
-      <Link to={productPath(bucket)}>← Buckets</Link>
+      <Box component="nav" aria-label="Breadcrumb">
+        <Link to="/catalog">Resources</Link> /{' '}
+        <Link to={productPath(bucket)}>Bucket</Link>
+      </Box>
       {error && (
         <Typography role="alert" color="error">
           {error}
@@ -105,26 +104,58 @@ export function BucketPage() {
       {item && (
         <>
           <Box my={2}>
-            <Typography variant="h1">{item.name}</Typography>
+            <h1>{item.name}</h1>
             <Typography color="textSecondary">
-              {platformName[item.platform]} · {item.team}
+              {[
+                statusLabel[item.status],
+                platformName[item.platform],
+                item.region,
+                item.team,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </Typography>
           </Box>
-          {item.status === 'ready' ? (
-            <FileManager key={item.id} item={item} />
-          ) : (
-            <Typography>
-              This bucket is {item.status}. Return to Buckets to retry
-              provisioning.
-            </Typography>
-          )}
+          <ComputeDetailColumns
+            primary={
+              <InfoCard
+                title="Files"
+                titleTypographyProps={{ component: 'h2' }}
+              >
+                {item.status === 'ready' ? (
+                  <FileManager
+                    key={item.id}
+                    item={item}
+                    onRefresh={() => setUsageRevision(value => value + 1)}
+                  />
+                ) : (
+                  <Typography>
+                    Return to Bucket to retry provisioning.
+                  </Typography>
+                )}
+              </InfoCard>
+            }
+            details={
+              <BucketDetails
+                key={item.id}
+                item={item}
+                revision={usageRevision}
+              />
+            }
+          />
         </>
       )}
     </Box>
   );
 }
 
-function FileManager({ item }: { item: Bucket }) {
+function FileManager({
+  item,
+  onRefresh,
+}: {
+  item: Bucket;
+  onRefresh: () => void;
+}) {
   const request = useBucketRequest();
   const base = `/${item.id}`;
   const [folder, setFolder] = useState('');
@@ -205,7 +236,10 @@ function FileManager({ item }: { item: Bucket }) {
     setError('');
   }
 
-  const refresh = () => setRevision(value => value + 1);
+  const refresh = () => {
+    setRevision(value => value + 1);
+    onRefresh();
+  };
   const updateTransfer = (id: string, patch: Partial<Transfer>) => {
     setQueue(entries =>
       entries.map(entry => (entry.id === id ? { ...entry, ...patch } : entry)),

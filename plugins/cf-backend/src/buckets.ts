@@ -6,6 +6,7 @@ import {
 import { parseEntityRef } from '@backstage/catalog-model';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import express from 'express';
+import { azureReader } from './azure';
 import {
   awsStorage,
   azureStorage,
@@ -28,6 +29,8 @@ type Bucket = {
   platform: Platform;
   cloud_name: string;
   status: 'provisioning' | 'ready' | 'failed';
+  requested_at?: Date | string | null;
+  requested_by?: string | null;
 };
 type Caller = { user: string; teams: string[]; admin: boolean };
 
@@ -114,6 +117,17 @@ export const bucketsPlugin = createBackendPlugin({
             table.unique(['team', 'name']);
           });
         }
+        const [hasRequestedAt, hasRequestedBy] = await Promise.all([
+          db.schema.hasColumn(buckets, 'requested_at'),
+          db.schema.hasColumn(buckets, 'requested_by'),
+        ]);
+        if (!hasRequestedAt || !hasRequestedBy) {
+          await db.schema.alterTable(buckets, table => {
+            if (!hasRequestedAt)
+              table.timestamp('requested_at', { useTz: true });
+            if (!hasRequestedBy) table.string('requested_by');
+          });
+        }
         if (!(await db.schema.hasTable(audit))) {
           await db.schema.createTable(audit, table => {
             table.uuid('id').primary();
@@ -134,6 +148,17 @@ export const bucketsPlugin = createBackendPlugin({
         const uploadRole = process.env.BUCKET_AWS_UPLOAD_ROLE_ARN;
         const azureAccount = process.env.BUCKET_AZURE_ACCOUNT;
         const azureSecret = process.env.BUCKET_AZURE_SECRET_ID;
+        const azureRegion = () =>
+          azureReader().then(
+            reader => reader.location,
+            () => undefined,
+          );
+        const userView = (bucket: Bucket, location?: string) => ({
+          ...view(bucket),
+          region: bucket.platform === 'aws' ? region : location,
+          requestedAt: bucket.requested_at,
+          requestedBy: bucket.requested_by,
+        });
         const providers: Partial<Record<Platform, BucketStorage>> = {
           aws:
             region && awsAccount && uploadRole
@@ -277,12 +302,10 @@ export const bucketsPlugin = createBackendPlugin({
                   .status(404)
                   .json({ error: 'Storage resource or file not found.' });
               } else if (status === 409 || status === 412) {
-                res
-                  .status(409)
-                  .json({
-                    error:
-                      'The source changed or the destination already exists. Refresh and try again.',
-                  });
+                res.status(409).json({
+                  error:
+                    'The source changed or the destination already exists. Refresh and try again.',
+                });
               } else {
                 // Provider errors can contain SAS URLs or credentials in request details.
                 logger.warn('Bucket operation failed', {
@@ -337,8 +360,12 @@ export const bucketsPlugin = createBackendPlugin({
           userRoute(async (_req, res, caller) => {
             const selection = db<Bucket>(buckets).orderBy(['name', 'team']);
             if (!caller.admin) selection.whereIn('team', caller.teams);
+            const rows = await selection;
+            const location = rows.some(row => row.platform === 'azure')
+              ? await azureRegion()
+              : undefined;
             res.json({
-              buckets: (await selection).map(view),
+              buckets: rows.map(row => userView(row, location)),
               platforms: {
                 aws: Boolean(providers.aws),
                 azure: Boolean(providers.azure),
@@ -389,6 +416,8 @@ export const bucketsPlugin = createBackendPlugin({
                 team,
                 platform,
                 status: 'provisioning',
+                requested_at: new Date(),
+                requested_by: caller.user,
                 cloud_name:
                   platform === 'aws'
                     ? `cf-bucket-${awsAccount}-${id.replace(/-/g, '')}`
@@ -416,7 +445,19 @@ export const bucketsPlugin = createBackendPlugin({
         router.get(
           '/:id',
           userRoute(async (req, res, caller) => {
-            res.json(view(await owned(req, caller, false)));
+            const target = await owned(req, caller, false);
+            const location =
+              target.platform === 'azure' ? await azureRegion() : undefined;
+            const storageUri =
+              target.platform === 'aws'
+                ? `s3://${target.cloud_name}`
+                : azureAccount &&
+                  `https://${azureAccount}.blob.core.windows.net/${target.cloud_name}`;
+            res.json({
+              ...userView(target, location),
+              cloudName: target.cloud_name,
+              storageUri,
+            });
           }),
         );
         router.post(
@@ -425,6 +466,12 @@ export const bucketsPlugin = createBackendPlugin({
             const bucket = await owned(req, caller, false);
             await provision(bucket);
             res.json({ id: bucket.id });
+          }),
+        );
+        router.get(
+          '/:id/usage',
+          objectRoute(async (_req, res, target, provider) => {
+            res.json(await provider.usage(target));
           }),
         );
         router.get(
@@ -455,12 +502,10 @@ export const bucketsPlugin = createBackendPlugin({
             const expected =
               req.body?.etag === undefined ? undefined : etagOf(req.body.etag);
             if (current && !expected) {
-              res
-                .status(409)
-                .json({
-                  error: 'This file already exists.',
-                  existing: current,
-                });
+              res.status(409).json({
+                error: 'This file already exists.',
+                existing: current,
+              });
               return;
             }
             if (expected !== current?.etag)

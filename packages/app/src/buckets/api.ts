@@ -12,7 +12,12 @@ export type Bucket = {
   team: string;
   platform: Platform;
   status: 'provisioning' | 'ready' | 'failed';
+  region?: string;
+  requestedAt?: string | null;
+  requestedBy?: string | null;
 };
+export type BucketDetail = Bucket & { cloudName: string; storageUri?: string };
+export type BucketUsage = { objects: number; bytes: number; complete: boolean };
 export type ObjectEntry = {
   key: string;
   size: number;
@@ -37,6 +42,11 @@ export type Credentials =
     }
   | { platform: 'azure'; expiresAt: string; url: string; sas: string };
 export const platformName = { aws: 'Amazon S3', azure: 'Azure Blob Storage' };
+export const statusLabel: Record<Bucket['status'], string> = {
+  ready: 'Ready',
+  failed: 'Failed',
+  provisioning: 'Provisioning',
+};
 export class BucketError extends Error {
   constructor(message: string, readonly existing?: ObjectEntry) {
     super(message);
