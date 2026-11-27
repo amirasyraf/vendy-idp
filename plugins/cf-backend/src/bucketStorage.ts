@@ -96,7 +96,9 @@ const objectInfo = (
 ): ObjectInfo => {
   if (size === undefined || !etag)
     throw new Error('Object metadata is incomplete');
-  return { key, size, etag, updatedAt: modified?.toISOString() };
+  // Azure list responses omit the quotes present in HTTP ETag headers.
+  const version = etag.startsWith('"') ? etag : `"${etag}"`;
+  return { key, size, etag: version, updatedAt: modified?.toISOString() };
 };
 
 export function storageStatus(error: unknown): number | undefined {
