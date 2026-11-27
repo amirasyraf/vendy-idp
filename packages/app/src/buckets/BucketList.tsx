@@ -1,0 +1,185 @@
+import { Link } from '@backstage/core-components';
+import { useEntity } from '@backstage/plugin-catalog-react';
+import {
+  Box,
+  Button,
+  Chip,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@material-ui/core';
+import { useCallback, useEffect, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+import { bucket, bucketPath, launchPath } from '../products/catalog';
+import {
+  Bucket,
+  describeError,
+  Platform,
+  platformName,
+  useBucketRequest,
+} from './api';
+
+const statusLabel: Record<Bucket['status'], string> = {
+  ready: 'Ready',
+  failed: 'Failed',
+  provisioning: 'Provisioning',
+};
+
+export function BucketList() {
+  const request = useBucketRequest();
+  const [inventory, setInventory] = useState<{
+    buckets: Bucket[];
+    platforms: Record<Platform, boolean>;
+  }>();
+  const [error, setError] = useState('');
+  const [retrying, setRetrying] = useState<string>();
+  const refresh = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const result = await request<typeof inventory>('/', undefined, signal);
+        if (!signal?.aborted) {
+          setInventory(result);
+          setError('');
+        }
+      } catch (failure) {
+        if (!signal?.aborted) setError(describeError(failure));
+      }
+    },
+    [request],
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    void refresh(controller.signal);
+    return () => controller.abort();
+  }, [refresh]);
+  const retry = async (id: string) => {
+    setRetrying(id);
+    setError('');
+    try {
+      await request(`/${id}/retry`, {});
+      await refresh();
+    } catch (failure) {
+      setError(describeError(failure));
+    } finally {
+      setRetrying(undefined);
+    }
+  };
+  const unavailable =
+    inventory && !Object.values(inventory.platforms).some(Boolean);
+  return (
+    <Box component="main" p={3}>
+      <Box
+        display="flex"
+        alignItems="center"
+        flexWrap="wrap"
+        gridGap={16}
+        mb={3}
+      >
+        <Box flexGrow={1}>
+          <Typography variant="overline">Storage</Typography>
+          <Typography variant="h1">Bucket</Typography>
+          <Typography color="textSecondary">
+            Browse and manage private team buckets on AWS and Azure.
+          </Typography>
+        </Box>
+        <Button onClick={() => void refresh()}>Refresh</Button>
+        <Button
+          component={RouterLink}
+          to={launchPath(bucket)}
+          disabled={unavailable}
+          variant="contained"
+          color="primary"
+        >
+          Create bucket
+        </Button>
+      </Box>
+      {error && (
+        <Typography color="error" role="alert">
+          {error}
+        </Typography>
+      )}
+      {unavailable && (
+        <Typography color="textSecondary">
+          Bucket infrastructure is unavailable in this environment.
+        </Typography>
+      )}
+      {!inventory && !error && (
+        <Typography role="status">Loading buckets…</Typography>
+      )}
+      {inventory?.buckets.length === 0 && (
+        <Typography>No team buckets yet.</Typography>
+      )}
+      {!!inventory?.buckets.length && (
+        <Paper variant="outlined" style={{ overflowX: 'auto' }}>
+          <Table size="small" aria-label="Buckets">
+            <TableHead>
+              <TableRow>
+                <TableCell>Name</TableCell>
+                <TableCell>Cloud</TableCell>
+                <TableCell>Team</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {inventory.buckets.map(item => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    {item.status === 'ready' ? (
+                      <Link to={bucketPath(item.id)}>{item.name}</Link>
+                    ) : (
+                      item.name
+                    )}
+                  </TableCell>
+                  <TableCell>{platformName[item.platform]}</TableCell>
+                  <TableCell>{item.team}</TableCell>
+                  <TableCell>
+                    <Chip size="small" label={statusLabel[item.status]} />
+                  </TableCell>
+                  <TableCell align="right">
+                    {item.status !== 'ready' && (
+                      <Button
+                        onClick={() => void retry(item.id)}
+                        disabled={Boolean(retrying)}
+                      >
+                        {retrying === item.id
+                          ? 'Retrying…'
+                          : 'Retry provisioning'}
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Paper>
+      )}
+    </Box>
+  );
+}
+
+export function BucketOverview() {
+  const { entity } = useEntity();
+  const id = entity.metadata.annotations?.['cf/bucket-id'];
+  return (
+    <Box p={3}>
+      <Typography variant="h1" gutterBottom>
+        {entity.metadata.title ?? entity.metadata.name}
+      </Typography>
+      {id && (
+        <Button
+          component={RouterLink}
+          to={bucketPath(id)}
+          color="primary"
+          variant="contained"
+        >
+          Open bucket
+        </Button>
+      )}
+    </Box>
+  );
+}

@@ -6,6 +6,11 @@ export const categories = [
     title: 'Compute',
     description: 'Run workloads on managed compute resources.',
   },
+  {
+    id: 'storage',
+    title: 'Storage',
+    description: 'Store and manage files for your team.',
+  },
 ];
 
 export const products = [
@@ -27,6 +32,15 @@ export const products = [
     template: 'container-request',
     launchFlow: 'platform',
   },
+  {
+    category: 'storage',
+    id: 'bucket',
+    title: 'Bucket',
+    description: 'Create and manage private team storage on AWS or Azure.',
+    resourceType: 'bucket',
+    template: 'bucket-request',
+    launchFlow: 'platform',
+  },
 ];
 
 type Product = (typeof products)[number];
@@ -38,6 +52,8 @@ export const productPath = (product: Product) =>
 
 export const virtualMachines = products[0];
 export const containers = products[1];
+export const bucket = products[2];
+export const bucketPath = (id: string) => `${productPath(bucket)}/${id}`;
 export const containerPlatforms = [
   { id: 'aws', label: 'AWS', available: true },
   { id: 'azure', label: 'Azure', available: true },

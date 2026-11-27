@@ -20,6 +20,7 @@ import {
 } from '@internal/plugin-vm-status';
 import { errorMessage } from '../clientLog';
 import {
+  bucket,
   categories,
   containerPlatforms,
   launchPath,
@@ -119,7 +120,7 @@ const useStyles = makeStyles(theme => ({
 }));
 
 const vmSteps = ['Product Type', 'Product', 'Platform', 'Image', 'Configure'];
-const containerSteps = ['Product Type', 'Product', 'Platform', 'Configure'];
+const platformSteps = ['Product Type', 'Product', 'Platform', 'Configure'];
 const imageFamilies = [
   { id: 'linux', title: 'Linux Distributions' },
   { id: 'windows', title: 'Windows' },
@@ -280,14 +281,14 @@ function LaunchFlow() {
   const template = findTemplate(product.template);
   const back = ['/launch', categoryPath];
   const productLaunch = launchPath(product);
-  const isContainer = product.launchFlow === 'platform';
+  const platformOnly = product.launchFlow === 'platform';
   if (!template) {
     return (
       <Shell
         step={2}
         back={back}
         title={product.title}
-        steps={isContainer ? containerSteps : vmSteps}
+        steps={platformOnly ? platformSteps : vmSteps}
       >
         <Choices {...catalog} />
         {catalog.items && (
@@ -296,14 +297,17 @@ function LaunchFlow() {
       </Shell>
     );
   }
-  if (isContainer) {
+  if (platformOnly) {
+    const isBucket = product === bucket;
     if (platformId) {
       const platform = containerPlatforms.find(item => item.id === platformId);
       return (
         <Navigate
           to={
             platform
-              ? templateUrl(template, { container: { platform: platform.id } })
+              ? templateUrl(template, isBucket
+                  ? { platform: platform.id }
+                  : { container: { platform: platform.id } })
               : productLaunch
           }
           replace
@@ -315,8 +319,8 @@ function LaunchFlow() {
         back={back}
         productLaunch={productLaunch}
         platforms={containerPlatforms}
-        workload="container"
-        steps={containerSteps}
+        workload={isBucket ? 'bucket' : 'container'}
+        steps={platformSteps}
       />
     );
   }

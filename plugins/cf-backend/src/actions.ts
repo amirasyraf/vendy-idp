@@ -187,3 +187,35 @@ export function createContainerDispatchAction(
     },
   });
 }
+
+export function createBucketAction(auth: AuthService, discovery: DiscoveryService) {
+  return createTemplateAction({
+    id: 'cf:bucket:create',
+    description: 'Create a private Bucket for a Vendy team',
+    schema: {
+      input: { name: z => z.string(), owner: z => z.string(), platform: z => z.enum(['aws', 'azure']) },
+      output: { url: z => z.string() },
+    },
+    async handler(ctx) {
+      const bucket = await ctx.checkpoint({
+        key: 'cf.bucket.create.v1',
+        fn: async () => {
+          const caller = await ctx.getInitiatorCredentials();
+          if (!auth.isPrincipal(caller, 'user')) throw new Error('A signed-in user is required');
+          const { token } = await auth.getPluginRequestToken({ onBehalfOf: caller, targetPluginId: 'buckets' });
+          const response = await fetch(await discovery.getBaseUrl('buckets'), {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...ctx.input, requestId: ctx.task.id }),
+            signal: AbortSignal.timeout(100_000),
+          });
+          const result = await response.json();
+          if (!response.ok || typeof result.id !== 'string')
+            throw new Error(typeof result.error === 'string' ? result.error : `Bucket request failed (HTTP ${response.status})`);
+          return { id: result.id };
+        },
+      });
+      ctx.output('url', `/products/storage/bucket/${bucket.id}`);
+    },
+  });
+}

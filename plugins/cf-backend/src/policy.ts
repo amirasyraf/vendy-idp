@@ -46,7 +46,7 @@ export class ComputeFactoryPolicy implements PermissionPolicy {
       return createCatalogConditionalDecision(request.permission, {
         anyOf: [
           {
-            // Team-owned products: VMs and containers are visible to their team only.
+            // Team-owned products are visible to their team only.
             not: {
               allOf: [
                 catalogConditions.isEntityKind({ kinds: ['Resource'] }),
@@ -57,6 +57,7 @@ export class ComputeFactoryPolicy implements PermissionPolicy {
                       key: 'type',
                       value: 'container',
                     }),
+                    catalogConditions.hasSpec({ key: 'type', value: 'bucket' }),
                   ],
                 },
               ],

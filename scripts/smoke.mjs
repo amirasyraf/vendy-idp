@@ -58,6 +58,7 @@ const config = {
       'org.yaml',
       'locations.yaml',
       'templates/ssh-cert/template.yaml',
+      'templates/bucket-request/template.yaml',
     ].map(file => ({ type: 'file', target: `/app/catalog/${file}` })),
   },
 };
@@ -166,6 +167,7 @@ try {
     `user:default/${normalUser}`,
     'location:default/cf-vms',
     'template:default/ssh-cert',
+    'template:default/bucket-request',
   ];
   let refs = [];
   for (let attempt = 0; attempt < 60; attempt++) {
@@ -267,6 +269,21 @@ try {
     Authorization: `Bearer ${normal.token}`,
     'Content-Type': 'application/json',
   };
+  const bucketsUrl = `${proxyUrl}/api/buckets`;
+  const bucketsResponse = await fetch(bucketsUrl, { headers: normalHeaders });
+  const buckets = await bucketsResponse.json();
+  if (
+    !bucketsResponse.ok ||
+    buckets.buckets?.length !== 0 ||
+    buckets.platforms?.aws !== false ||
+    buckets.platforms?.azure !== false ||
+    (await fetch(bucketsUrl)).status !== 401 ||
+    (await fetch(`${bucketsUrl}/catalog`, { headers: normalHeaders })).status !==
+      403
+  )
+    throw new Error(
+      'Bucket inventory must require the right identity and run offline without cloud access',
+    );
   const forbiddenToggle = await fetch(`${demoBase}/settings`, {
     method: 'POST',
     headers: normalHeaders,

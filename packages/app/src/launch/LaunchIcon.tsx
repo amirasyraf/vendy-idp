@@ -4,6 +4,7 @@ import Code from '@material-ui/icons/Code';
 import DnsOutlined from '@material-ui/icons/DnsOutlined';
 import LayersOutlined from '@material-ui/icons/LayersOutlined';
 import Storage from '@material-ui/icons/Storage';
+import FolderOpenOutlined from '@material-ui/icons/FolderOpenOutlined';
 
 const useStyles = makeStyles({
   tile: {
@@ -22,6 +23,8 @@ const icons: Record<string, [string, string, ReactNode]> = {
   compute: ['#0B5FD3', '#EAF2FF', <Storage />],
   'virtual-machines': ['#0B5FD3', '#EAF2FF', <DnsOutlined />],
   containers: ['#0B5FD3', '#EAF2FF', <LayersOutlined />],
+  storage: ['#0B5FD3', '#EAF2FF', <Storage />],
+  bucket: ['#0B5FD3', '#EAF2FF', <FolderOpenOutlined />],
   aws: ['#232F3E', '#FFF3E0', <img src="/aws-mark.svg" alt="" />],
   azure: [
     '#006EB6',

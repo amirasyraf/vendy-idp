@@ -1,0 +1,48 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: bucket-request
+  title: Create bucket
+  description: Launch private object storage on AWS or Azure.
+spec:
+  owner: group:default/platform-admins
+  type: bucket
+  presentation:
+    buttonLabels:
+      createButtonText: Create bucket
+  parameters:
+    - title: Configure bucket
+      required: [name, owner, platform]
+      properties:
+        name:
+          title: Bucket name
+          type: string
+          minLength: 3
+          maxLength: 40
+          pattern: '^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$'
+          description: Display name within the owning team. The cloud resource name is assigned by Vendy.
+        owner:
+          title: Owning team
+          type: string
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind: Group
+              spec.type: team
+        platform:
+          title: Cloud
+          type: string
+          enum: [aws, azure]
+          enumNames: [Amazon S3, Azure Blob Storage]
+  steps:
+    - id: create
+      name: Create private bucket
+      action: cf:bucket:create
+      input:
+        name: ${{ parameters.name }}
+        owner: ${{ parameters.owner }}
+        platform: ${{ parameters.platform }}
+  output:
+    links:
+      - title: Open bucket
+        url: ${{ steps.create.output.url }}

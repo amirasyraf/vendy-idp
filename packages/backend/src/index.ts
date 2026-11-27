@@ -8,6 +8,8 @@ import {
   containersPlugin,
   clientLogPlugin,
   vmSizesPlugin,
+  bucketsPlugin,
+  bucketCatalogModule,
 } from '@internal/plugin-cf-backend';
 
 const backend = createBackend();
@@ -27,6 +29,8 @@ backend.add(sshModule);
 backend.add(mockRestPlugin);
 backend.add(vmsPlugin);
 backend.add(containersPlugin);
+backend.add(bucketsPlugin);
+backend.add(bucketCatalogModule);
 backend.add(clientLogPlugin);
 backend.add(vmSizesPlugin);
 backend.add(import('@backstage/plugin-search-backend'));

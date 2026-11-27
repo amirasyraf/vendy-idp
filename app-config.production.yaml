@@ -9,6 +9,9 @@ backend:
   # Exactly one proxy hop (Caddy, which replaces any client X-Forwarded-For), so audit
   # and client-log entries record the real client IP instead of Caddy's container IP.
   trustProxy: 1
+  csp:
+    connect-src: ["'self'", "https://*.s3.ap-southeast-2.amazonaws.com", "https://*.blob.core.windows.net"]
+    img-src: ["'self'", "data:", "blob:"]
   cors:
     origin: https://${IDP_DOMAIN}
   database:
@@ -38,3 +41,5 @@ catalog:
       target: /app/catalog/locations.yaml
     - type: file
       target: /app/catalog/templates/ssh-cert/template.yaml
+    - type: file
+      target: /app/catalog/templates/bucket-request/template.yaml

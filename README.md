@@ -2,7 +2,9 @@
 
 This is the Backstage app at [idp.amirasyraf.dev](https://idp.amirasyraf.dev). From the portal you can
 launch an Ubuntu or Windows VM on AWS or Azure, follow the provisioning run, and connect once it
-is ready. Vendy uses its own password sign-in. It does not need a GitHub OAuth app.
+is ready, deploy containers, or create a private **Storage → Bucket** on S3 or Azure Blob Storage.
+Each bucket has a browser file manager and temporary credentials for local uploads. Vendy uses
+its own password sign-in. It does not need a GitHub OAuth app.
 
 ## Run it locally
 
@@ -23,7 +25,7 @@ NODE_OPTIONS=--no-node-snapshot mise exec -- node .yarn/releases/yarn-4.13.0.cjs
 ```
 
 Open [localhost:3000](http://localhost:3000). The local catalog uses in-memory SQLite. VM automation
-is off by default, so local requests cannot dispatch a workflow. Use the local server to work on UI
+is off by default, and Bucket operations require the deployed storage infrastructure. Use the local server to work on UI
 changes without rebuilding the Docker image.
 
 ## Checks

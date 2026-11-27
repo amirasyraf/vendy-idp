@@ -55,9 +55,10 @@ Node 24 (`mise.toml`) and the scaffold's vendored Yarn 4.13.0.
   search modal, settings and the signed-in user). The stock template list (`page:scaffolder`,
   `/create`) is no longer in the bar; its routes still work.
 - `packages/app/src/products/catalog.ts`: product categories, IDs, resource types, and template names
-   shared by Home, Resources and Launch. The only product is **Compute → Virtual Machines**.
+   shared by Home, Resources and Launch. Compute contains Virtual Machines and Containers; Storage
+   contains Bucket.
 - `packages/app/src/launch/`: **Launch** (`/launch`) starts with product categories, then products
-   whose registered Scaffolder templates are tagged `product`. At `/launch/compute/virtual-machines`,
+   with registered Scaffolder templates. At `/launch/compute/virtual-machines`,
    platform cards show provider names (vSphere is marked **Coming Soon**). The next step shows
    OS/release cards from `GET /api/vm-sizes/platforms`. `GET /api/vm-sizes/image-availability`
    checks the cloud separately; missing, unready, or unverifiable releases are disabled.
@@ -242,6 +243,32 @@ Node 24 (`mise.toml`) and the scaffold's vendored Yarn 4.13.0.
   - **Browser error reporting.** Uncaught errors, unhandled rejections, exhausted task-update polling,
     identity load failures and stale bundles are POSTed to the `client-log` backend plugin, at most 30
     per page load and only once signed in.
+
+## Bucket
+
+**Storage → Bucket** (`/products/storage/bucket`) lists team buckets in both clouds and shows
+provisioning failures with a retry action. Scaffolder submits the task ID and the signed-in
+initiator to the Buckets backend. The backend reserves a unique name per team, generates the
+physical cloud name, and retries only the same resource. The bucket list reads the database
+directly. A Backstage provider projects ready buckets into Home and Resources asynchronously;
+there is no public Git bucket inventory.
+
+The bucket detail is a file manager. Browse folders (object-key prefixes), search the current
+folder by name prefix, upload files or whole folders, drop files, see progress, cancel or retry,
+preview selected text and image types up to 5 MiB, download, rename/move a file, and delete one
+or several visible files. Empty folders are not stored. Browser upload and individual moves support
+up to 4 GiB per file. Retries restart an individual browser upload. Rename/move is a conditional
+server-side copy followed by a conditional delete; if the latter fails, the UI reports that both
+paths may remain. The browser asks before replacing an existing file.
+
+Every user operation resolves the user's current catalog membership server-side. The owning team
+and platform admins can act on a bucket. The IDP sends short-lived, object-scoped grants to the
+browser for direct transfers, and performs listing and mutations on the control plane. There is no
+public file sharing. The CLI dialog defaults to 60 minutes and accepts integer values from 15
+through 480 minutes. It shows write credentials once: AWS STS for AWS CLI v2 and a user delegation
+SAS for AzCopy v10. CLI grants can overwrite existing files; they cannot read, list, or delete
+files. They can remain usable after sign-out or a membership change until their displayed expiry.
+The bucket database audits issuance ID, actor, bucket and expiry without recording credentials.
 
 ## Logging and troubleshooting
 

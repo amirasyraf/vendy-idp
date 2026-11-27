@@ -4,7 +4,7 @@ import { useMatch } from 'react-router-dom';
 import { launchPath, products } from '../products/catalog';
 import './launchForm.css';
 
-/** Keep the stock wizard, but give the two product request forms their own layout. */
+/** Keep the stock wizard, but give the product request forms their own layout. */
 export function LaunchFormLayout({ children }: { children: ReactNode }) {
   const match = useMatch('/create/templates/default/:templateName');
   const product = products.find(

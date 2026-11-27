@@ -526,6 +526,15 @@ Password sign-in is an owned composition of themed MUI controls: a narrow
 error and full-width primary submit with busy text. It is not a separate visual
 world. Session restoration initially shows a spinner.
 
+### Storage → Bucket
+
+Bucket uses the same Launch category and platform steps as the compute products, then opens a
+bucket-specific file manager. The file list shows the active folder and prefix filter above the
+table, selected files in the rows, and upload status below. Delete, move, and credential generation
+use dialogs; transfers report per-file progress and errors. The browser's file and folder pickers
+are also available without drag and drop. Credentials sit on the bucket detail beside the upload
+actions so their scope is visible.
+
 ## Do's and Don'ts
 
 ### Do

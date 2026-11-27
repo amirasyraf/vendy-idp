@@ -10,6 +10,7 @@ import { createSshSignAction } from './sign';
 import { authProvidersExtensionPoint } from '@backstage/plugin-auth-node';
 import { passwordProviderFactory } from './auth';
 import {
+  createBucketAction,
   createContainerDispatchAction,
   createVmDispatchAction,
   createVmRunAction,
@@ -20,6 +21,8 @@ export { vmsPlugin } from './vms';
 export { containersPlugin } from './containers';
 export { clientLogPlugin } from './clientLog';
 export { vmSizesPlugin } from './vmSizes';
+export { bucketsPlugin } from './buckets';
+export { bucketCatalogModule } from './bucketCatalog';
 
 export const passwordAuthModule = createBackendModule({
   pluginId: 'auth',
@@ -67,6 +70,7 @@ export const sshModule = createBackendModule({
           createVmDispatchAction(auth, discovery),
           createVmRunAction(auth, discovery),
           createContainerDispatchAction(auth, discovery),
+          createBucketAction(auth, discovery),
         );
       },
     });

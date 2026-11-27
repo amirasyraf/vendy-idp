@@ -22,6 +22,8 @@ import {
 } from '@internal/plugin-vm-status';
 import { errorMessage, reportClientEvent } from '../../clientLog';
 import {
+  bucket,
+  bucketPath,
   categories,
   productOf,
   productPath,
@@ -446,9 +448,10 @@ function ResourceRow({
   icon: ReactNode;
 }) {
   const classes = useStyles();
+  const bucketId = productOf(entity) === bucket ? entity.metadata.annotations?.['cf/bucket-id'] : undefined;
   return (
     <li>
-      <Link to={entityPath(entity)} className={classes.row}>
+      <Link to={bucketId ? bucketPath(bucketId) : entityPath(entity)} className={classes.row}>
         <span className={classes.rowIcon} aria-hidden="true">
           {icon}
         </span>
@@ -658,7 +661,7 @@ export function HomePage() {
                           isVm ? <DnsOutlinedIcon /> : <LayersOutlinedIcon />
                         }
                         to={productPath(product)}
-                        linkLabel={`View All ${product.title}`}
+                        linkLabel={`View All ${product === bucket ? 'Buckets' : product.title}`}
                       >
                         <Rows entities={entities} />
                       </ProductPanel>

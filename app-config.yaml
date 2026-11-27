@@ -62,3 +62,5 @@ catalog:
       target: ../../catalog/locations.yaml
     - type: file
       target: ../../catalog/templates/ssh-cert/template.yaml
+    - type: file
+      target: ../../catalog/templates/bucket-request/template.yaml
