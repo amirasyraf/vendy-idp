@@ -837,6 +837,7 @@ function FileManager({ item }: { item: Bucket }) {
             <DialogContent>
               <TextField
                 fullWidth
+                id="bucket-move-destination"
                 label="Destination path from bucket root"
                 value={move.to}
                 onChange={event => setMove({ ...move, to: event.target.value })}
@@ -876,6 +877,7 @@ function FileManager({ item }: { item: Bucket }) {
             <DialogContent>
               <TextField
                 fullWidth
+                id="bucket-new-folder-path"
                 label="Folder path from bucket root"
                 value={prefix}
                 onChange={event => setPrefix(event.target.value)}

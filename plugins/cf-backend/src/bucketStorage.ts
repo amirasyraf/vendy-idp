@@ -187,66 +187,65 @@ export function awsStorage(options: {
         }),
         abort(),
       );
-      await Promise.all([
-        s3.send(
-          new PutBucketCorsCommand({
-            ...scope,
-            CORSConfiguration: {
-              CORSRules: [
-                {
-                  AllowedOrigins: [origin],
-                  AllowedMethods: ['PUT', 'GET'],
-                  AllowedHeaders: [
-                    'content-type',
-                    'if-match',
-                    'if-none-match',
-                    'x-amz-*',
-                  ],
-                  MaxAgeSeconds: 300,
-                },
-              ],
-            },
+      // S3 rejects overlapping writes to the same bucket configuration.
+      await s3.send(
+        new PutBucketCorsCommand({
+          ...scope,
+          CORSConfiguration: {
+            CORSRules: [
+              {
+                AllowedOrigins: [origin],
+                AllowedMethods: ['PUT', 'GET'],
+                AllowedHeaders: [
+                  'content-type',
+                  'if-match',
+                  'if-none-match',
+                  'x-amz-*',
+                ],
+                MaxAgeSeconds: 300,
+              },
+            ],
+          },
+        }),
+        abort(),
+      );
+      await s3.send(
+        new PutBucketPolicyCommand({
+          ...scope,
+          Policy: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [
+              {
+                Effect: 'Deny',
+                Principal: '*',
+                Action: 's3:*',
+                Resource: [
+                  `arn:aws:s3:::${scope.Bucket}`,
+                  `arn:aws:s3:::${scope.Bucket}/*`,
+                ],
+                Condition: { Bool: { 'aws:SecureTransport': 'false' } },
+              },
+            ],
           }),
-          abort(),
-        ),
-        s3.send(
-          new PutBucketPolicyCommand({
-            ...scope,
-            Policy: JSON.stringify({
-              Version: '2012-10-17',
-              Statement: [
-                {
-                  Effect: 'Deny',
-                  Principal: '*',
-                  Action: 's3:*',
-                  Resource: [
-                    `arn:aws:s3:::${scope.Bucket}`,
-                    `arn:aws:s3:::${scope.Bucket}/*`,
-                  ],
-                  Condition: { Bool: { 'aws:SecureTransport': 'false' } },
-                },
-              ],
-            }),
-          }),
-          abort(),
-        ),
-        s3.send(
-          new PutBucketLifecycleConfigurationCommand({
-            ...scope,
-            LifecycleConfiguration: {
-              Rules: [
-                {
-                  ID: 'abort-incomplete-uploads',
-                  Filter: { Prefix: '' },
-                  Status: 'Enabled',
-                  AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 },
-                },
-              ],
-            },
-          }),
-          abort(),
-        ),
-      ]);
+        }),
+        abort(),
+      );
+      await s3.send(
+        new PutBucketLifecycleConfigurationCommand({
+          ...scope,
+          LifecycleConfiguration: {
+            Rules: [
+              {
+                ID: 'abort-incomplete-uploads',
+                Filter: { Prefix: '' },
+                Status: 'Enabled',
+                AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 },
+              },
+            ],
+          },
+        }),
+        abort(),
+      );
     },
     async list(target, prefix, cursor) {
       const page = await s3.send(

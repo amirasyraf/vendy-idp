@@ -111,6 +111,7 @@ export function CredentialsDialog({
           {!credential && (
             <TextField
               label="Expires after (minutes)"
+              id="bucket-credential-expiry"
               type="number"
               value={minutes}
               onChange={event => setMinutes(event.target.value)}

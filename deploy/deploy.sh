@@ -57,6 +57,8 @@ trap cleanup EXIT
 socket_dir=$(mktemp -d /tmp/cf-idp.XXXXXX)
 tunnel="$socket_dir/s"
 registry_repo=localhost:15000/compute-factory-idp
+staged_image=""
+shipped=""
 
 if [[ "$prune" == true ]]; then
   ssh "${ssh_opts[@]}" "$target" bash -s <<'REMOTE'
@@ -98,7 +100,7 @@ for file in docker-compose.yml Caddyfile cluster-install.sh; do
 done
 REMOTE
   ssh "${ssh_opts[@]}" "$target" "umask 077; cat > '$remote_dir/.env'" < "$env_file"
-  shipped=$(ssh "${ssh_opts[@]}" "$target" bash -s -- "$reference" "$remote_dir" "$registry_repo" <<'REMOTE'
+  staged_image=$(ssh "${ssh_opts[@]}" "$target" bash -s -- "$reference" "$remote_dir" "$registry_repo" <<'REMOTE'
 set -euo pipefail
 source_image=$1 stage=$2 registry_repo=$3
 docker compose --env-file "$stage/.env" -f "$stage/docker-compose.yml" config --no-env-resolution --quiet
@@ -106,17 +108,12 @@ install -d -m 700 /opt/idp
 install -m 600 "$stage/.env" /opt/idp/.env
 install -m 644 "$stage"/{docker-compose.yml,Caddyfile,cluster-install.sh} /opt/idp/
 cd /opt/idp
-docker compose up -d registry </dev/null >&2
-for attempt in $(seq 1 30); do
-  if curl -fs --max-time 2 -o /dev/null http://127.0.0.1:15000/v2/; then break; fi
-  [[ "$attempt" != 30 ]] || { echo 'IDP registry not ready on the host' >&2; exit 1; }
-  sleep 1
-done
 docker tag "$source_image" "$registry_repo:latest"
-# Push the verified host platform, not an index with manifests the host did not pull.
-timeout 180 docker push --platform linux/arm64 "$registry_repo:latest" | awk '{ print > "/dev/stderr" } $2 == "digest:" && $4 == "size:" {print $3}'
+docker compose pull --policy missing caddy postgres registry guacd </dev/null >&2
+docker image inspect --format '{{.Id}}' "$source_image"
 REMOTE
   )
+  [[ "$staged_image" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Could not verify the staged image ID' >&2; exit 1; }
   echo "Pulled and staged $reference on the IDP host: $((SECONDS - start))s"
 else
 if [[ -z "$image" ]]; then
@@ -158,19 +155,22 @@ shipped=$(docker push "$registry_repo:latest" | awk '{ print > "/dev/stderr" } $
 ssh -S "$tunnel" -O exit "$target" 2>/dev/null
 echo "Upload artifact: $((SECONDS - start))s"
 fi
-[[ "$shipped" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Could not verify the registry push digest' >&2; exit 1; }
+[[ -n "$staged_image" || "$shipped" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Could not verify the registry push digest' >&2; exit 1; }
 start=$SECONDS
 # The containers cluster (k3s, autoscalers, the IDP's kube credentials in /opt/idp/kube) must be in
 # place before Backstage starts. Verify the exact pushed manifest before using the host-local
 # image ID (which can differ from the runner's) for the installer and running container checks.
-host_image=$(ssh "${ssh_opts[@]}" "$target" bash -s -- "$registry_repo" "$shipped" <<'REMOTE'
+host_image=$(ssh "${ssh_opts[@]}" "$target" bash -s -- "$registry_repo" "$shipped" "$staged_image" <<'REMOTE'
 set -euo pipefail
 cd /opt/idp
-repo=$1 digest=$2
-docker compose pull backstage >&2
-docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$repo:latest" | grep -Fx "$repo@$digest" >/dev/null ||
-  { echo "Pulled image does not match $repo@$digest; not restarting Backstage" >&2; exit 1; }
+repo=$1 digest=$2 staged=$3
+if [[ -z "$staged" ]]; then
+  docker compose pull backstage >&2
+  docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$repo:latest" | grep -Fx "$repo@$digest" >/dev/null ||
+    { echo "Pulled image does not match $repo@$digest; not restarting Backstage" >&2; exit 1; }
+fi
 actual=$(docker image inspect --format '{{.Id}}' "$repo:latest")
+[[ -z "$staged" || "$actual" == "$staged" ]] || { echo 'The staged image changed; not restarting Backstage' >&2; exit 1; }
 bash ./cluster-install.sh .env "$actual" </dev/null >&2
 printf '%s\n' "$actual"
 REMOTE
@@ -178,12 +178,16 @@ REMOTE
 [[ "$host_image" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Could not verify the host image ID' >&2; exit 1; }
 echo "Containers cluster: $((SECONDS - start))s"
 start=$SECONDS
-ssh "${ssh_opts[@]}" "$target" bash -s -- "$host_image" <<'REMOTE'
+ssh "${ssh_opts[@]}" "$target" bash -s -- "$host_image" "$staged_image" <<'REMOTE'
 set -euo pipefail
 cd /opt/idp
 expected=$1
 previous_caddy=$(docker compose ps --quiet caddy)
-docker compose up -d --remove-orphans
+if [[ -n "$2" ]]; then
+  docker compose up -d --pull never --remove-orphans
+else
+  docker compose up -d --remove-orphans
+fi
 container=$(docker compose ps --all --quiet backstage)
 [[ -n "$container" && "$(docker inspect --format '{{.Image}}' "$container")" == "$expected" ]] \
   || { echo "Backstage container does not use $expected" >&2; exit 1; }
