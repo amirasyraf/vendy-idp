@@ -27,10 +27,11 @@ spec:
           type: string
           ui:field: MyGroupsPicker
         platform:
-          title: Cloud
+          title: Platform
           type: string
           enum: [aws, azure]
           enumNames: [Amazon S3, Azure Blob Storage]
+          ui:field: BucketPlatform
   steps:
     - id: create
       name: Create private bucket

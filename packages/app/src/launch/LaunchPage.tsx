@@ -22,8 +22,8 @@ import { errorMessage } from '../clientLog';
 import {
   bucket,
   categories,
-  containerPlatforms,
   launchPath,
+  platformOptions,
   products,
   virtualMachines,
 } from '../products/catalog';
@@ -300,7 +300,7 @@ function LaunchFlow() {
   if (platformOnly) {
     const isBucket = product === bucket;
     if (platformId) {
-      const platform = containerPlatforms.find(item => item.id === platformId);
+      const platform = platformOptions.find(item => item.id === platformId);
       return (
         <Navigate
           to={
@@ -318,7 +318,7 @@ function LaunchFlow() {
       <Platforms
         back={back}
         productLaunch={productLaunch}
-        platforms={containerPlatforms}
+        platforms={platformOptions}
         workload={isBucket ? 'bucket' : 'container'}
         steps={platformSteps}
       />

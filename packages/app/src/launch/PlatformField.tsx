@@ -2,13 +2,21 @@ import { Link } from '@backstage/core-components';
 import type { FieldExtensionComponentProps } from '@backstage/plugin-scaffolder-react';
 import { createFormField } from '@backstage/plugin-scaffolder-react/alpha';
 import { Box, FormHelperText, Paper } from '@material-ui/core';
-import { containerPlatforms, containers, launchPath } from '../products/catalog';
+import {
+  bucket,
+  containers,
+  launchPath,
+  platformOptions,
+} from '../products/catalog';
 
-function ContainerPlatformField({
+function PlatformSelection({
   formData,
   rawErrors,
-}: FieldExtensionComponentProps<string>) {
-  const platform = containerPlatforms.find(item => item.id === formData);
+  pickerPath,
+}: Pick<FieldExtensionComponentProps<string>, 'formData' | 'rawErrors'> & {
+  pickerPath: string;
+}) {
+  const platform = platformOptions.find(item => item.id === formData);
   return (
     <Box>
       <Paper variant="outlined" className="vendy-launch-selection">
@@ -23,7 +31,7 @@ function ContainerPlatformField({
             <br />
             <b>{platform?.label ?? 'No platform selected'}</b>
           </div>
-          <Link to={launchPath(containers)}>
+          <Link to={pickerPath}>
             {platform ? 'Change Platform' : 'Choose a Platform'}
           </Link>
         </Box>
@@ -37,5 +45,14 @@ function ContainerPlatformField({
 
 export const ContainerPlatform = createFormField({
   name: 'ContainerPlatform',
-  component: ContainerPlatformField,
+  component: props => (
+    <PlatformSelection {...props} pickerPath={launchPath(containers)} />
+  ),
+});
+
+export const BucketPlatform = createFormField({
+  name: 'BucketPlatform',
+  component: props => (
+    <PlatformSelection {...props} pickerPath={launchPath(bucket)} />
+  ),
 });

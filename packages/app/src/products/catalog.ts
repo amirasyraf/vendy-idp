@@ -54,7 +54,7 @@ export const virtualMachines = products[0];
 export const containers = products[1];
 export const bucket = products[2];
 export const bucketPath = (id: string) => `${productPath(bucket)}/${id}`;
-export const containerPlatforms = [
+export const platformOptions = [
   { id: 'aws', label: 'AWS', available: true },
   { id: 'azure', label: 'Azure', available: true },
 ];

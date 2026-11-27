@@ -63,9 +63,14 @@ const scaffolder = scaffolderPlugin.withOverrides({
       name: 'container-platform',
       params: {
         field: () =>
-          import('./containers/ContainerPlatformField').then(
-            m => m.ContainerPlatform,
-          ),
+          import('./launch/PlatformField').then(m => m.ContainerPlatform),
+      },
+    }),
+    FormFieldBlueprint.make({
+      name: 'bucket-platform',
+      params: {
+        field: () =>
+          import('./launch/PlatformField').then(m => m.BucketPlatform),
       },
     }),
     // VM request compute field: the chosen platform/image, size cards with live specs and an
