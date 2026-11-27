@@ -113,7 +113,8 @@ for attempt in $(seq 1 30); do
   sleep 1
 done
 docker tag "$source_image" "$registry_repo:latest"
-timeout 180 docker push "$registry_repo:latest" | awk '{ print > "/dev/stderr" } $2 == "digest:" && $4 == "size:" {print $3}'
+# Push the verified host platform, not an index with manifests the host did not pull.
+timeout 180 docker push --platform linux/arm64 "$registry_repo:latest" | awk '{ print > "/dev/stderr" } $2 == "digest:" && $4 == "size:" {print $3}'
 REMOTE
   )
   echo "Pulled and staged $reference on the IDP host: $((SECONDS - start))s"
