@@ -197,6 +197,18 @@ try {
   for (const ref of requiredRefs) {
     if (!refs.includes(ref)) throw new Error(`Missing ${ref}`);
   }
+  const launchTemplates = await fetch(
+    `${baseUrl}/api/catalog/entities?filter=kind=template,metadata.tags=product`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (
+    !launchTemplates.ok ||
+    !(await launchTemplates.json()).some(
+      entity => entity.metadata.name === 'bucket-request',
+    )
+  ) {
+    throw new Error('Bucket template is not visible to the Launch picker');
+  }
   const platformTemplates = refs.filter(ref =>
     /^template:default\/vm-/.test(ref),
   );

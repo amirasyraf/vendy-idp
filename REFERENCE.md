@@ -58,7 +58,7 @@ Node 24 (`mise.toml`) and the scaffold's vendored Yarn 4.13.0.
    shared by Home, Resources and Launch. Compute contains Virtual Machines and Containers; Storage
    contains Bucket.
 - `packages/app/src/launch/`: **Launch** (`/launch`) starts with product categories, then products
-   with registered Scaffolder templates. At `/launch/compute/virtual-machines`,
+   whose registered Scaffolder templates are tagged `product`. At `/launch/compute/virtual-machines`,
    platform cards show provider names (vSphere is marked **Coming Soon**). The next step shows
    OS/release cards from `GET /api/vm-sizes/platforms`. `GET /api/vm-sizes/image-availability`
    checks the cloud separately; missing, unready, or unverifiable releases are disabled.

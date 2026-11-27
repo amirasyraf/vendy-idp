@@ -4,6 +4,7 @@ metadata:
   name: bucket-request
   title: Create bucket
   description: Launch private object storage on AWS or Azure.
+  tags: [product]
 spec:
   owner: group:default/platform-admins
   type: bucket
@@ -24,11 +25,7 @@ spec:
         owner:
           title: Owning team
           type: string
-          ui:field: OwnerPicker
-          ui:options:
-            catalogFilter:
-              kind: Group
-              spec.type: team
+          ui:field: MyGroupsPicker
         platform:
           title: Cloud
           type: string
