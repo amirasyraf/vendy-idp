@@ -247,7 +247,9 @@ Node 24 (`mise.toml`) and the scaffold's vendored Yarn 4.13.0.
 ## Bucket
 
 **Storage → Bucket** (`/products/storage/bucket`) lists team buckets in both clouds and shows
-provisioning failures with a retry action. Scaffolder submits the task ID and the signed-in
+provisioning failures with a retry action. Launch selects AWS or Azure before Configure.
+Configure shows the selected platform and links back to the picker via **Change Platform**.
+Scaffolder submits the task ID and the signed-in
 initiator to the Buckets backend. The backend reserves a unique name per team, generates the
 physical cloud name, and retries only the same resource. The bucket list reads the database
 directly. A Backstage provider projects ready buckets into Home and Resources asynchronously;
