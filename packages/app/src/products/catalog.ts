@@ -36,7 +36,7 @@ export const products = [
     category: 'storage',
     id: 'bucket',
     title: 'Bucket',
-    description: 'Create and manage private team storage on AWS or Azure.',
+    description: 'Create and manage private team object storage on AWS or Azure.',
     resourceType: 'bucket',
     template: 'bucket-request',
     launchFlow: 'platform',
