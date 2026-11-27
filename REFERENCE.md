@@ -549,7 +549,7 @@ Only `./poc up` waits for cloud-init, configures DNS, and restores saved TLS sto
 For `./poc deploy-idp --gha` and `./poc up --gha`, the `build-idp.yml` workflow uses the same build
 and smoke scripts on a native Linux ARM64 runner (bundled Chromium in CI). It publishes only a
 smoke-tested image; `poc` reads the manifest and config digests from the exact successful run. The
-server pulls the manifest digest and stages the verified ARM64 manifest in the existing registry. This supports both
+server pulls the manifest digest and starts the verified ARM64 image from its local Docker image store. This supports both
 classic and containerd Docker image stores, which can report different IDs for the same artifact.
 Private packages require
 separate read-only credentials; the portal's GitHub token is never used for GHCR. No local Docker
