@@ -255,6 +255,14 @@ physical cloud name, and retries only the same resource. The bucket list reads t
 directly. A Backstage provider projects ready buckets into Home and Resources asynchronously;
 there is no public Git bucket inventory.
 
+The inventory lists platform, region, team, requested date when recorded, and status. The
+bucket detail uses the same two-column layout as VMs and Containers: Files alongside
+Configuration, Details, and Connect. Connect shows the cloud storage URI without a token.
+Details shows current object count and bytes, refreshed with the file list. The usage check
+reads one cloud page (up to 1,000 objects) across all prefixes and labels the values as
+lower bounds when more pages exist. It excludes old object versions and incomplete uploads.
+Request dates and actors are recorded for new buckets; older records can leave them blank.
+
 The bucket detail is a file manager. Browse folders (object-key prefixes), search the current
 folder by name prefix, upload files or whole folders, drop files, see progress, cancel or retry,
 preview selected text and image types up to 5 MiB, download, rename/move a file, and delete one
